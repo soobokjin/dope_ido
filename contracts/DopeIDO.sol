@@ -25,22 +25,34 @@ struct Share {
 }
 
 contract IDOPlatform {
-
+    // project 관련
     address[] private _admins;
     string public saleTokenName;
     address public saleTokenAddress;
     uint public saleTokenAmount;
 
+    // swap 관련
     address public exchangeTokenAddress;
     // Todo: 정수로 소수 계산하도록 하기
     uint256 exchangeRate;
-    mapping (address => Share) public userShare;
-    uint256 public totalInterest;
 
+    // stake 관련
     address public treasuryAddress;
     address public stakeTokenAddress;
     mapping (address => uint[]) userStakeChangedBlockNums;
     mapping (address => mapping (uint256 => uint256)) userStakeAmountByBlockNum;
+
+    // loan 관련
+    mapping (address => Share) public userShare;
+    // Todo: naming
+    uint256 public totalLockedShare;
+    uint256 public interestRate;
+    uint256 public depositRate;
+
+    // Todo: naming
+    address public lendTokenAddress;
+    uint256 public totalDepositAmount;
+    mapping (address => uint256) lenderDepositAmount;
 
     Period public iDOPeriod;
 
@@ -128,8 +140,8 @@ contract IDOPlatform {
     }
 
     function acquireShareOfSaleToken (uint amount) public virtual {
-        // Todo: 한 개인이 최대 구매가능한 수량 한정하기
         // Todo: swap 가능한 시기인 지 체크
+        // Todo: 한 개인이 최대 구매가능한 수량 한정하기
         // Todo: stake 조건 체크
         // Todo: whitelist 여부 체크
 
@@ -150,8 +162,62 @@ contract IDOPlatform {
         _share.isSwapped = true;
     }
 
+    function depositForLend (uint256 amount) public virtual {
+        // Todo: deposit 가능한 시점인 지 체크
+        // Todo: amount 양수 체크
+        // Todo: allowance 체크
+        require(amount > 0, "invalid amount. should be positive value");
+        IERC20 token = IERC20(lendTokenAddress);
+        require(token.allowance(msg.sender, address(this)) >= amount, "불 충분한 token 개수");
 
+        token.transferFrom(msg.sender, address(this), amount);
+        lenderDepositAmount[msg.sender] += amount;
+    }
 
+    function withdrawForLend (uint256 amount) public virtual {
+        // Todo: withdraw 가능한 시점인 지 체크
+        // Todo: amount 양수 체크
+        // Todo: 현재 예치한 금액 체크
+
+        token.transfer(msg.sender, amount);
+        lenderDepositAmount[msg.sender] -= amount;
+    }
+
+    function lend (uint256 collateralAmount_) public virtual {
+        // Todo: lend 가능한 시점인 지 체크
+        // Todo: 기본적인 금액 체크
+        // Todo: 담보가능한 금액이 있는 지 체크
+        // Todo: 현재 deposit amount 가 충분한 지 체크
+        Share storage _userShare = userShare[msg.sender];
+        uint256 remainShare = _userShare.amount - _userShare.collateralAmount;
+        uint256 loanAmount = (collateralAmount_ * depositRate) / 10000;
+        require(remainShare >= collateralAmount_, "insufficient share");
+
+        // send loanAmount to user
+        IERC20(lendTokenAddress).transfer(msg.sender, loanAmount);
+        // minus loanAmount from the totalDepsitAmount
+        totalDepositAmount -= loanAmount;
+        // update the user collateralAmount;
+        _userShare.collateralAmount += collateralAmount_;
+        // update the totalLockedShare;
+        totalLockedShare += collateralAmount_;
+    }
+
+    function payBack() public virtual {
+        // Todo:
+        Share storage _userShare = userShare[msg.sender];
+        // collateralAmount 만큼 받을 수 있는지 allowance check
+
+        // collateralAmount 만큼 가져오기
+
+        // user collateralAmount 제거
+
+        // user share amount 를 interestRate 를 뺀 금액으로 update
+
+        // totalDepsitAmount 에 전체 금액 추가
+
+        // totalLockedShare 에 interestRate 를 뺀 금액 제거
+    }
 
 }
 
