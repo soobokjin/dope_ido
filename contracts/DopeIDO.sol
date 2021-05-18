@@ -1,7 +1,8 @@
 pragma solidity ^0.8.0;
 
-import {ERC20} from './ERC20.sol';
-import {IERC20} from './IERC20.sol';
+import {SafeMath} from '@openzeppelin/contracts/math/SafeMath.sol';
+import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
 
 /*
 loanRate
@@ -145,7 +146,7 @@ contract IDOPlatform {
         // Todo: stake 조건 체크
         // Todo: whitelist 여부 체크
 
-        ERC20 fromToken = ERC20(exchangeTokenAddress);
+        IERC20 fromToken = IERC20(exchangeTokenAddress);
         fromToken.transferFrom(msg.sender, treasuryAddress, amount);
         userShare[msg.sender] = Share(amount, 0);
     }
