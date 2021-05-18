@@ -25,7 +25,7 @@ struct Share {
     bool isSwapped;
 }
 
-contract IDOPlatform {
+contract Dope {
     // project 관련
     address[] private _admins;
     string public saleTokenName;
