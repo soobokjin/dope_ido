@@ -55,12 +55,17 @@ contract DOPE {
     mapping (address => Share) public userShare;
     // Todo: naming
     uint256 public totalLockedShare;
+    uint256 public totalRemainShareAfterDistribution;
     uint256 public interestRate;
     uint256 public depositRate;
 
     // Todo: naming
     address public lendTokenAddress;
-    uint256 public totalDepositAmount;
+    // 대출 실행시 유동적으로 변경되는 현재 금액
+    uint256 public totalLockedDepositAmount;
+    uint256 public totalCurrentDepositAmount;
+    uint256 public totalRemainDepositAmountAfterDistribution;
+    // 대출금 모집 이후 Fix 된 금액
     mapping (address => uint256) lenderDepositAmount;
 
     Period public iDOPeriod;
@@ -169,15 +174,29 @@ contract DOPE {
 
         token.transferFrom(msg.sender, address(this), amount);
         lenderDepositAmount[msg.sender] += amount;
+        totalLockedDepositAmount += amount;
+        totalCurrentDepositAmount = totalLockedDepositAmount;
+        totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
     }
 
-    function withdrawLend (uint256 amount) public virtual {
+    function withdrawLend () public virtual {
         // Todo: withdraw 가능한 시점인 지 체크 (IDO 종료이후)
         // Todo: amount 양수 체크
         // Todo: 현재 예치한 금액 체크
+        // Todo: 남은 share 할 금액이 있는 지 체크
         IERC20 token = IERC20(lendTokenAddress);
-        token.transfer(msg.sender, amount);
-        lenderDepositAmount[msg.sender] -= amount;
+        uint256 depositAmount = lenderDepositAmount[msg.sender];
+        uint256 lenderDepositPercent = depositAmount / totalLockedDepositAmount;
+        uint256 returnDepositAmount = totalCurrentDepositAmount * lenderDepositPercent;
+        uint256 returnShareAmount = totalLockedShare * lenderDepositPercent;
+        uint swapAmount = (returnShareAmount * exchangeRate) / RATE;
+
+        IERC20(saleTokenAddress).transfer(msg.sender, swapAmount);
+        token.transfer(msg.sender, returnDepositAmount);
+
+        totalRemainShareAfterDistribution -= returnShareAmount;
+        totalRemainDepositAmountAfterDistribution -= returnDepositAmount;
+        lenderDepositAmount[msg.sender] = 0;
     }
 
     function lend (uint256 collateralAmount_) public virtual {
@@ -193,11 +212,13 @@ contract DOPE {
         // send loanAmount to user
         IERC20(lendTokenAddress).transfer(msg.sender, loanAmount);
         // minus loanAmount from the totalDepsitAmount
-        totalDepositAmount -= loanAmount;
+        totalCurrentDepositAmount -= loanAmount;
+        totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
         // update the user collateralAmount;
         _userShare.collateralAmount += collateralAmount_;
         // update the totalLockedShare;
         totalLockedShare += collateralAmount_;
+        totalRemainShareAfterDistribution = totalLockedShare;
     }
 
     function payback(uint256 paybackAmount) public virtual {
@@ -216,8 +237,10 @@ contract DOPE {
         _userShare.amount -= interestAmount;
         _userShare.collateralAmount -= returnCollateralAmount;
 
-        totalDepositAmount += paybackAmount;
+        totalCurrentDepositAmount += paybackAmount;
+        totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
         totalLockedShare -= unlockShare;
+        totalRemainShareAfterDistribution = totalLockedShare;
     }
 
     function claimToken () public virtual {
