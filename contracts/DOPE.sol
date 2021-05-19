@@ -10,6 +10,13 @@ loanPenaltyRate
 whiteList
 */
 
+// Todo: code refactoring
+// Todo: method define
+// Todo: event
+// Todo: modifier, require
+// Todo: safeMath 적용
+
+
 struct Period {
     uint startIDOBlockNum;
     uint startSwapBlockNum;
@@ -25,7 +32,8 @@ struct Share {
     bool isSwapped;
 }
 
-contract Dope {
+contract DOPE {
+    uint8 constant RATE = 10000;
     // project 관련
     address[] private _admins;
     string public saleTokenName;
@@ -151,19 +159,7 @@ contract Dope {
         userShare[msg.sender] = Share(amount, 0);
     }
 
-    function claimSaleToken () public virtual {
-        // Todo: swap 가능한 시기인 지 체크
-        // Todo: 이미 swap 했는 지 체크
-        Share _share = userShare[msg.sender];
-        uint finalShare = _share.amount - _share.collateralAmount;
-        // Todo: solidity 의 percent 처리 확인하기
-        uint swapAmount = (finalShare * exchangeRate) / 10000;
-
-        IERC20(saleTokenAddress).transfer(msg.sender, swapAmount);
-        _share.isSwapped = true;
-    }
-
-    function depositForLend (uint256 amount) public virtual {
+    function depositLend (uint256 amount) public virtual {
         // Todo: deposit 가능한 시점인 지 체크
         // Todo: amount 양수 체크
         // Todo: allowance 체크
@@ -175,11 +171,11 @@ contract Dope {
         lenderDepositAmount[msg.sender] += amount;
     }
 
-    function withdrawForLend (uint256 amount) public virtual {
-        // Todo: withdraw 가능한 시점인 지 체크
+    function withdrawLend (uint256 amount) public virtual {
+        // Todo: withdraw 가능한 시점인 지 체크 (IDO 종료이후)
         // Todo: amount 양수 체크
         // Todo: 현재 예치한 금액 체크
-
+        IERC20 token = IERC20(lendTokenAddress);
         token.transfer(msg.sender, amount);
         lenderDepositAmount[msg.sender] -= amount;
     }
@@ -191,7 +187,7 @@ contract Dope {
         // Todo: 현재 deposit amount 가 충분한 지 체크
         Share storage _userShare = userShare[msg.sender];
         uint256 remainShare = _userShare.amount - _userShare.collateralAmount;
-        uint256 loanAmount = (collateralAmount_ * depositRate) / 10000;
+        uint256 loanAmount = (collateralAmount_ * depositRate) / RATE;
         require(remainShare >= collateralAmount_, "insufficient share");
 
         // send loanAmount to user
@@ -204,22 +200,37 @@ contract Dope {
         totalLockedShare += collateralAmount_;
     }
 
-    function payBack() public virtual {
-        // Todo:
+    function payback(uint256 paybackAmount) public virtual {
+        // Todo: payBack 가능한 시점인 지 체크
+        // Todo: amount 금액 체크
+        // Todo: IDO 참여 여부 체크
+        IERC20 token = IERC20(lendTokenAddress);
+        require(token.allowance(msg.sender, address(this)) >= paybackAmount, "불 충분한 token 개수");
         Share storage _userShare = userShare[msg.sender];
-        // collateralAmount 만큼 받을 수 있는지 allowance check
+        uint256 _currentCollateralAmount = _userShare.collateralAmount;
+        uint256 returnCollateralAmount = (paybackAmount * RATE) / depositRate;
+        uint256 interestAmount = (returnCollateralAmount * interestRate) / RATE;
+        uint256 unlockShare = (returnCollateralAmount - interestAmount);
 
-        // collateralAmount 만큼 가져오기
+        token.transferFrom(msg.sender, this(address), paybackAmount);
+        _userShare.amount -= interestAmount;
+        _userShare.collateralAmount -= returnCollateralAmount;
 
-        // user collateralAmount 제거
-
-        // user share amount 를 interestRate 를 뺀 금액으로 update
-
-        // totalDepsitAmount 에 전체 금액 추가
-
-        // totalLockedShare 에 interestRate 를 뺀 금액 제거
+        totalDepositAmount += paybackAmount;
+        totalLockedShare -= unlockShare;
     }
 
+    function claimToken () public virtual {
+        // Todo: swap 가능한 시기인 지 체크
+        // Todo: 이미 swap 했는 지 체크
+        Share _share = userShare[msg.sender];
+        uint finalShare = _share.amount - _share.collateralAmount;
+        // Todo: solidity 의 percent 처리 확인하기
+        uint swapAmount = (finalShare * exchangeRate) / RATE;
+
+        IERC20(saleTokenAddress).transfer(msg.sender, swapAmount);
+        _share.isSwapped = true;
+    }
 }
 
 
