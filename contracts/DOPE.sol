@@ -220,16 +220,15 @@ contract DOPE {
     }
 
     // Todo: 대출금을 받는 식으로 수정
-    function lend (uint256 collateralAmount_) public virtual {
+    function lend (uint256 loanAmount) public virtual {
         // Todo: lend 가능한 시점인 지 체크
         // Todo: 기본적인 금액 체크
         // Todo: 담보가능한 금액이 있는 지 체크
         // Todo: 현재 deposit amount 가 충분한 지 체크
         Share storage _userShare = userShare[msg.sender];
+        uint256 additionalCollateralAmount = loanAmount.mul(MAX_DEPOSIT_RATE).div(depositRate);
         uint256 remainShare = _userShare.amount.sub(_userShare.collateralAmount);
-        // 소수점 버림으로 인해 실제 담보율에 비해 적은 금액을 받게 됨 (미미한 값)
-        uint256 loanAmount = collateralAmount_.mul(depositRate).div(MAX_DEPOSIT_RATE);
-        require(remainShare >= collateralAmount_, "insufficient share");
+        require(remainShare >= additionalCollateralAmount, "insufficient share");
 
         // send loanAmount to user
         IERC20(lendTokenAddress).transfer(msg.sender, loanAmount);
@@ -237,9 +236,9 @@ contract DOPE {
         totalCurrentDepositAmount = totalCurrentDepositAmount.sub(loanAmount);
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
         // update the user collateralAmount;
-        _userShare.collateralAmount = _userShare.collateralAmount.add(collateralAmount_);
+        _userShare.collateralAmount = _userShare.collateralAmount.add(additionalCollateralAmount);
         // update the totalLockedShare;
-        totalLockedShare = totalLockedShare.add(collateralAmount_);
+        totalLockedShare = totalLockedShare.add(additionalCollateralAmount);
         totalRemainShareAfterDistribution = totalLockedShare;
     }
 
