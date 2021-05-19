@@ -78,23 +78,28 @@ contract DOPE {
     Period public iDOPeriod;
 
     constructor (
-        string _saleTokenName,
-        address _saleTokenAddress,
-        uint _saleTokenAmount,
-        address _exchangeTokenAddress,
-        uint8 _exchangeRate,
-        address _treasuryAddress,
-        address _stakeTokenAddress
+        string saleTokenName_,
+        address saleTokenAddress_,
+        uint256 saleTokenAmount_,
+        address exchangeTokenAddress_,
+        uint8 exchangeRate_,
+        address treasuryAddress_,
+        address stakeTokenAddress_,
+        uint256 interestRate_,
+        uint256 depositRate_
     ) {
         _admins.push(msg.sender);
 
-        saleTokenName = _saleTokenName;
-        saleTokenAddress = _saleTokenAddress;
-        saleTokenAmount = _saleTokenAmount;
-        exchangeTokenAddress = _exchangeTokenAddress;
-        exchangeRate = _exchangeRate;
-        treasuryAddress = _treasuryAddress;
-        stakeTokenAddress = _stakeTokenAddress;
+        saleTokenName = saleTokenName_;
+        saleTokenAddress = saleTokenAddress_;
+        saleTokenAmount = saleTokenAmount_;
+        exchangeTokenAddress = exchangeTokenAddress_;
+        exchangeRate = exchangeRate_;
+        treasuryAddress = treasuryAddress_;
+        stakeTokenAddress = stakeTokenAddress_;
+        interestRate = interestRate_;
+        depositRate = depositRate_;
+        lendTokenAddress = stakeTokenAddress;
     }
 
     function setPeriods (
