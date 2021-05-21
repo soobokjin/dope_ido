@@ -1,8 +1,8 @@
 pragma solidity ^0.8.0;
 
-import {SafeMath} from '@openzeppelin/contracts/math/SafeMath.sol';
+import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/SafeERC20.sol';
+import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
 /*
 loanRate
@@ -41,10 +41,10 @@ contract DOPE {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    uint8 constant EXCHANGE_RATE = 10 ** 6;
+    uint32 constant EXCHANGE_RATE = 10 ** 6;
     // 소수점 둘 째 자리까지 표현
-    uint8 constant MAX_DEPOSIT_RATE = 10000;
-    uint8 constant MAX_INTEREST_RATE = 10000;
+    uint32 constant MAX_DEPOSIT_RATE = 10000;
+    uint32 constant MAX_INTEREST_RATE = 10000;
     // project 관련
     address[] private _admins;
     string public saleTokenName;
@@ -82,7 +82,7 @@ contract DOPE {
     Period public iDOPeriod;
 
     constructor (
-        string saleTokenName_,
+        string memory saleTokenName_,
         address saleTokenAddress_,
         uint256 saleTokenAmount_,
         address exchangeTokenAddress_,
@@ -118,7 +118,7 @@ contract DOPE {
     ) public virtual returns (bool) {
         // Todo: validate all numbers
         // Todo: only owner can set the period
-        iDOPeriod = period(
+        iDOPeriod = Period(
             _startIDOBlockNum,
             _startSwapBlockNum,
             _endSwapBlockNum,
@@ -134,34 +134,34 @@ contract DOPE {
         // Todo: 최소 lockup 개수 체크
         // Todo: amount 만큼 가져올 수 있는 지 체크
         IERC20 token = IERC20(stakeTokenAddress);
-        require(token.allowance(msg.sender, address(this)) >= amount, "불 충분한 token 개수");
+        require(token.allowance(msg.sender, address(this)) >= amount, "insufficient");
+        address sender = msg.sender;
         uint256 historyLength = userStakeChangedBlockNums[sender].length;
         uint256 blockNumber = block.number;
-        address sender = msg.sender;
 
         // transfer
         token.transferFrom(msg.sender, address(this), amount);
         // record stake history
         if (historyLength == 0) {
             userStakeChangedBlockNums[sender].push(blockNumber);
-            userStakeAmount[sender][blockNumber] = amount;
+            userStakeAmountByBlockNum[sender][blockNumber] = amount;
         }
         else {
             uint256 lastChangedBlockNumber = userStakeChangedBlockNums[sender][historyLength.sub(1)];
-            uint256 lastStakedAmount = userStakeAmount[sender][lastChangedBlockNumber];
+            uint256 lastStakedAmount = userStakeAmountByBlockNum[sender][lastChangedBlockNumber];
             userStakeChangedBlockNums[sender].push(blockNumber);
 
-            userStakeAmount[sender][blockNumber] = lastStakedAmount.add(amount);
+            userStakeAmountByBlockNum[sender][blockNumber] = lastStakedAmount.add(amount);
         }
     }
 
     function unStake (uint amount) public virtual {
+        address sender = msg.sender;
+        uint256 blockNumber = block.number;
         require(amount > 0, "invalid amount. should be positive value");
         require(userStakeChangedBlockNums[sender].length > 0, "stake amount is 0");
         // Todo: amount 가 stake 량보다 작은 지 체크
         IERC20 token = IERC20(stakeTokenAddress);
-        uint256 blockNumber = block.number;
-        address sender = msg.sender;
         uint256 historyLength = userStakeChangedBlockNums[sender].length;
         uint256 lastChangedBlockNumber = userStakeChangedBlockNums[sender][historyLength.sub(1)];
         uint256 stakedAmount = userStakeAmountByBlockNum[sender][lastChangedBlockNumber];
@@ -180,7 +180,7 @@ contract DOPE {
 
         IERC20 fromToken = IERC20(exchangeTokenAddress);
         fromToken.transferFrom(msg.sender, treasuryAddress, amount);
-        userShare[msg.sender] = Share(amount, 0);
+        userShare[msg.sender] = Share(amount, 0, false);
     }
 
     function depositLend (uint256 amount) public virtual {
@@ -189,7 +189,7 @@ contract DOPE {
         // Todo: allowance 체크
         require(amount > 0, "invalid amount. should be positive value");
         IERC20 token = IERC20(lendTokenAddress);
-        require(token.allowance(msg.sender, address(this)) >= amount, "불 충분한 token 개수");
+        require(token.allowance(msg.sender, address(this)) >= amount, "insufficient");
 
         token.transferFrom(msg.sender, address(this), amount);
         lenderDepositAmount[msg.sender] = lenderDepositAmount[msg.sender].add(amount);
@@ -209,7 +209,7 @@ contract DOPE {
         uint256 returnDepositAmount = totalCurrentDepositAmount.mul(lenderDepositPercent).div((1e18));
         uint256 returnShareAmount = totalLockedShare.mul(lenderDepositPercent).div(1e18);
         // Todo: solidity 의 percent 처리 확인하기
-        uint swapAmount = returnShareAmount.mul(exchangeRate).dev(EXCHANGE_RATE);
+        uint swapAmount = returnShareAmount.mul(exchangeRate).div(EXCHANGE_RATE);
 
         IERC20(saleTokenAddress).transfer(msg.sender, swapAmount);
         token.transfer(msg.sender, returnDepositAmount);
@@ -247,9 +247,8 @@ contract DOPE {
         // Todo: amount 금액 체크
         // Todo: IDO 참여 여부 체크
         IERC20 token = IERC20(lendTokenAddress);
-        require(token.allowance(msg.sender, address(this)) >= paybackAmount, "불 충분한 token 개수");
+        require(token.allowance(msg.sender, address(this)) >= paybackAmount, "insufficient token amount");
         Share storage _userShare = userShare[msg.sender];
-        uint256 _currentCollateralAmount = _userShare.collateralAmount;
         // 적어진 금액에서 계산하므로 실질적으로 조금 더 적은량이 unlock 됨
         uint256 unlockCollateralAmount = paybackAmount.mul(MAX_DEPOSIT_RATE).div(depositRate);
         uint256 interestAmount = unlockCollateralAmount.mul(interestRate).div(MAX_INTEREST_RATE);
@@ -260,7 +259,7 @@ contract DOPE {
         totalLockedShare = totalLockedShare.sub(unlockShare);
         totalRemainShareAfterDistribution = totalLockedShare;
 
-        token.transferFrom(msg.sender, this(address), paybackAmount);
+        token.transferFrom(msg.sender, address(this), paybackAmount);
         totalCurrentDepositAmount = totalCurrentDepositAmount.add(paybackAmount);
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
     }
@@ -268,7 +267,7 @@ contract DOPE {
     function claimToken () public virtual {
         // Todo: swap 가능한 시기인 지 체크
         // Todo: 이미 swap 했는 지 체크
-        Share _share = userShare[msg.sender];
+        Share storage _share = userShare[msg.sender];
         uint finalShare = _share.amount.sub(_share.collateralAmount);
         // Todo: solidity 의 percent 처리 확인하기
         uint swapAmount = finalShare.mul(exchangeRate).div(EXCHANGE_RATE);
