@@ -1,4 +1,9 @@
 {
+  "name": "dope",
+  "version": "0.0.1",
+  "description": "DOPE",
+  "repository": "",
+  "license": "MIT",
   "devDependencies": {
     "@nomiclabs/hardhat-waffle": "^2.0.1",
     "@types/chai": "^4.2.18",
