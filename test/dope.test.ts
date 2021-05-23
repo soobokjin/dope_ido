@@ -44,7 +44,6 @@ describe("DOPE", () => {
             5,
             5
        );
-       await network.provider.send("evm_mine");
     });
 
     it("simple check", async () => {

@@ -7,18 +7,16 @@ let getPrivateEnv: Function = function (filePath: string): Map<String, String> {
 
     let splitEnv: Array<string> = env.split(/\n/);
     let envMapper = new Map();
-    for (let l in splitEnv) {
-        let values = splitEnv[l].split("=");
+    for (let index in splitEnv) {
+        let values = splitEnv[index].split("=");
         envMapper.set(values[0], values[1]);
     }
     return envMapper;
 }
+let envs: Map<String, String> = getPrivateEnv('./.env');
 
-let envMappers: Map<String, String> = getPrivateEnv('./.env');
-
-const ROPSTEN_INFURA_KEY = envMappers.get('ROPSTEN_INFURA_KEY');
-const ROPSTEN_PRIVATE_KEY = envMappers.get('ROPSTEN_PRIVATE_KEY');
-
+const ROPSTEN_INFURA_KEY = envs.get('ROPSTEN_INFURA_KEY');
+const ROPSTEN_PRIVATE_KEY = envs.get('ROPSTEN_PRIVATE_KEY');
 
 const config: HardhatUserConfig = {
   solidity: {
