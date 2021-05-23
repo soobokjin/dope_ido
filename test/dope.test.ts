@@ -3,30 +3,10 @@ import chai from "chai";
 import { solidity } from "ethereum-waffle";
 import { Contract, ContractFactory } from "ethers";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
-import { BaseProvider } from "@ethersproject/providers/src.ts/base-provider";
-
+import { accumulateBlockByBlockNumber, accumulateBlockByBlockCnt } from "./utils";
 
 chai.use(solidity);
 const { expect } = chai;
-const provider: BaseProvider = ethers.provider;
-
-let accumulateBlockByBlockNumber: Function = async function (blockNumber: number) {
-    await network.provider.send("evm_setAutomine", [false])
-    let currentBlockNumber: number = await provider.getBlockNumber();
-
-    for (let i = 0; i < blockNumber - currentBlockNumber; i++) {
-        await network.provider.send("evm_mine");
-    }
-    await network.provider.send("evm_setAutomine", [true])
-}
-
-let accumulateBlockByBlockCnt: Function = async function (blockCnt: number) {
-    await network.provider.send("evm_setAutomine", [false])
-    for (let i = 0; i < blockCnt; i++) {
-        await network.provider.send("evm_mine");
-    }
-    await network.provider.send("evm_setAutomine", [true])
-}
 
 describe("DOPE", () => {
 
