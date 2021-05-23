@@ -8,7 +8,8 @@
   },
   "include": [
     "./scripts",
-    "./test"
+    "./test",
+    "./hardhat.config.ts"
   ],
   "files": ["./hardhat.config.ts"]
 }

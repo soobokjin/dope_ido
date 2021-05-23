@@ -1,5 +1,6 @@
 import { HardhatUserConfig } from "hardhat/types";
 import "@nomiclabs/hardhat-waffle";
+import "hardhat-deploy";
 import { readFileSync } from 'fs';
 
 let getPrivateEnv: Function = function (filePath: string): Map<String, String> {
@@ -40,7 +41,14 @@ const config: HardhatUserConfig = {
     sources: './contracts',
     artifacts: './build/artifacts',
     cache: './build/cache',
+    deploy: './scripts/deploy',
+    deployments: './deployments',
     tests: './test',
+  },
+  namedAccounts: {
+    dopeOwner: 0,
+    saleTokenOwner: 0,
+    stableTokenOwner: 0,
   },
 };
 export default config;
