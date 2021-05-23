@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import "hardhat/console.sol";
 
 
 /*
@@ -90,7 +89,7 @@ contract DOPE {
         address exchangeTokenAddress_,
         address treasuryAddress_,
         address stakeTokenAddress_,
-        uint8 exchangeRate_,
+        uint256 exchangeRate_,
         // 소수점 둘 째 자리까지 표현. e.g. 50% -> 5000, 3.12% -> 312
         uint256 interestRate_,
         uint256 depositRate_
