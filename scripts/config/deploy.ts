@@ -6,4 +6,11 @@ export const CONTRACTS: { [network: string]: { [name: string]: any } } = {
       dopeToken: '0xbdebd30e3acafaea89738ef3ee923582725ff1c7'
     },
   },
+  hardhat: {
+    tokens: {
+      saleToken: '',
+      stableToken: '',
+      dopeToken: ''
+    },
+  },
 };

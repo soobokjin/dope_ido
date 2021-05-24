@@ -1,3 +1,5 @@
+import { ethers } from "hardhat";
+import { Contract } from "ethers";
 import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
@@ -29,15 +31,18 @@ async function deployToken (
         deterministicDeployment: false,
     });
 
-    return await get(name).address;
+    let result = await get(name);
+    return result.address;
 }
 
 const deployDOPE: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
+    // Todo: 시나리오 생성, 시나리오에 맞추어 deploy
+    // Todo: saleToken approval
+    // Todo: period 설정
     const { deployments, getNamedAccounts } = hre;
     const { dopeOwner, saleTokenOwner, stableTokenOwner } = await getNamedAccounts();
     const { deploy, get } = deployments;
     const DOPE = 'DOPE';
-
     const token_contracts: any = CONTRACTS[hre.network.name].tokens;
     const saleToken = 'ERC20Mintable';
     const dopeToken = 'ERC20Mintable';
@@ -47,7 +52,6 @@ const deployDOPE: DeployFunction = async function (hre: HardhatRuntimeEnvironmen
     let dopeTokenAddress = token_contracts.dopeToken;
     // Sale Token Deploy
     if (saleTokenAddress == '') {
-        console.log("deploy saleToken")
         saleTokenAddress = await deployToken(
             deploy, get, saleToken, saleTokenOwner,"sale Token","STN"
         );
@@ -62,10 +66,10 @@ const deployDOPE: DeployFunction = async function (hre: HardhatRuntimeEnvironmen
             deploy, get, dopeToken, dopeOwner,"DOPE Token","DOPE"
         );
     }
-
+    const saleTokenAmount = 50000000;
     // DOPE Deploy
     const gasPrice = 8000000000;
-    const stringGasPrice = '0x' + gasPrice.toString(16)
+    const stringGasPrice = '0x' + gasPrice.toString(16);
     await deploy(DOPE, {
         from: dopeOwner,
         gasLimit: 8000000,
@@ -73,7 +77,7 @@ const deployDOPE: DeployFunction = async function (hre: HardhatRuntimeEnvironmen
         args: [
             'STN',
             saleTokenAddress,
-            100000000000,
+            saleTokenAmount,
             stableTokenAddress,
             saleTokenOwner,
             dopeTokenAddress,
@@ -84,6 +88,17 @@ const deployDOPE: DeployFunction = async function (hre: HardhatRuntimeEnvironmen
         log: true,
         deterministicDeployment: false,
     });
-    await get(DOPE);
+    let dopeDeployment = await get(DOPE);
+    let tokenOwner;
+    [tokenOwner] = await ethers.getSigners();
+    console.log(tokenOwner.address);
+    console.log(saleTokenOwner);
+    let saleTokenContract: Contract = await ethers.getContractAt(stableToken, saleTokenAddress, tokenOwner);
+    let dopeContract: Contract = await ethers.getContractAt(DOPE, dopeDeployment.address, tokenOwner);
+    console.log(await saleTokenContract.connect(tokenOwner).balanceOf(dopeDeployment.address));
+    console.log(await saleTokenContract.connect(tokenOwner).approve(dopeDeployment.address, saleTokenAmount));
+    console.log(await dopeContract.connect(tokenOwner).putSaleToken());
+    console.log(await saleTokenContract.connect(tokenOwner).balanceOf(dopeDeployment.address));
+
 };
 export default deployDOPE;
