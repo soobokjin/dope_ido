@@ -59,13 +59,11 @@ contract DOPE {
 
     // loan 관련
     mapping (address => Share) public userShare;
-    // Todo: naming
     uint256 public totalLockedShare;
     uint256 public totalRemainShareAfterDistribution;
     uint256 public interestRate;
     uint256 public ltvRate;
 
-    // Todo: naming
     address public lendTokenAddress;
     // 대출 실행시 유동적으로 변경되는 현재 금액
     uint256 public totalLockedDepositAmount;
@@ -103,6 +101,37 @@ contract DOPE {
         lendTokenAddress = exchangeTokenAddress_;
     }
 
+    // -------------------- public getters -----------------------
+    function putSaleToken() public virtual {
+        IERC20 token = IERC20(saleTokenAddress);
+        require(token.allowance(treasuryAddress, address(this)) >= saleTokenAmount, "insufficient");
+        token.transferFrom(treasuryAddress, address(this), saleTokenAmount);
+    }
+
+    // stake
+    function getCurrentStakeAmount (address user) public view returns (uint256) {
+        uint256 length = userStakeChangedBlockNums[user].length;
+        if (length == 0) {
+            return 0;
+        }
+        uint256 lastBlockNumber = userStakeChangedBlockNums[user][length - 1];
+        return userStakeAmountByBlockNum[user][lastBlockNumber];
+    }
+
+    // funding
+    function getShareAndCollateral (address user) public view returns (uint256, uint256) {
+        uint256 shareAmount = userShare[user].amount;
+        uint256 collateralAmount = userShare[user].collateralAmount;
+
+        return (shareAmount.sub(collateralAmount), collateralAmount);
+    }
+
+    // lend
+    function getDepositedAmount(address user) public view returns (uint256) {
+        return lenderDepositAmount[user];
+    }
+
+    // -------------------- public set methods ------------------------
     function setPeriods (
         uint _startIDOBlockNum,
         uint _startFundBlockNum,
