@@ -4,13 +4,6 @@ import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
-
-/*
-loanRate
-loanPenaltyRate
-whiteList
-*/
-
 // contract 에서는 erc token 의 decimals 에 대해서 고려하지 않는다. (호출자 책임)
 
 // Todo: code refactoring
@@ -22,8 +15,8 @@ whiteList
 
 struct Period {
     uint startIDOBlockNum;
-    uint startSwapBlockNum;
-    uint endSwapBlockNum;
+    uint startFundBlockNum;
+    uint endFundBlockNum;
     uint startDepositLoanBlockNum;
     uint endDepositLoanBlockNum;
     uint endIDOBlockNum;
@@ -44,12 +37,13 @@ contract DOPE {
 
     uint32 constant EXCHANGE_RATE = 10 ** 6;
     // 소수점 둘 째 자리까지 표현
-    uint32 constant MAX_DEPOSIT_RATE = 10000;
+    uint32 constant MAX_LTV_RATE = 10000;
     uint32 constant MAX_INTEREST_RATE = 10000;
     // project 관련
     address[] private _admins;
     string public saleTokenName;
     address public saleTokenAddress;
+    // 전체 판매 금액
     uint public saleTokenAmount;
 
     // swap 관련
@@ -69,7 +63,7 @@ contract DOPE {
     uint256 public totalLockedShare;
     uint256 public totalRemainShareAfterDistribution;
     uint256 public interestRate;
-    uint256 public depositRate;
+    uint256 public ltvRate;
 
     // Todo: naming
     address public lendTokenAddress;
@@ -92,7 +86,7 @@ contract DOPE {
         uint256 exchangeRate_,
         // 소수점 둘 째 자리까지 표현. e.g. 50% -> 5000, 3.12% -> 312
         uint256 interestRate_,
-        uint256 depositRate_
+        uint256 ltvRate_
     ) {
         // Todo: Rate 가 10000 을 넘길 수 없음
         _admins.push(msg.sender);
@@ -105,14 +99,14 @@ contract DOPE {
         treasuryAddress = treasuryAddress_;
         stakeTokenAddress = stakeTokenAddress_;
         interestRate = interestRate_;
-        depositRate = depositRate_;
+        ltvRate = ltvRate_;
         lendTokenAddress = exchangeTokenAddress_;
     }
 
     function setPeriods (
         uint _startIDOBlockNum,
-        uint _startSwapBlockNum,
-        uint _endSwapBlockNum,
+        uint _startFundBlockNum,
+        uint _endFundBlockNum,
         uint _startDepositLoanBlockNum,
         uint _endDepositLoanBlockNum,
         uint _endIDOBlockNum
@@ -121,8 +115,8 @@ contract DOPE {
         // Todo: only owner can set the period
         iDOPeriod = Period(
             _startIDOBlockNum,
-            _startSwapBlockNum,
-            _endSwapBlockNum,
+            _startFundBlockNum,
+            _endFundBlockNum,
             _startDepositLoanBlockNum,
             _endDepositLoanBlockNum,
             _endIDOBlockNum
@@ -182,7 +176,7 @@ contract DOPE {
         userStakeAmountByBlockNum[sender][blockNumber] = stakedAmount.sub(amount);
     }
 
-    function acquireShareOfSaleToken (uint amount) public virtual {
+    function fundSaleToken (uint amount) public virtual {
         // Todo: swap 가능한 시기인 지 체크
         // Todo: 한 개인이 최대 구매가능한 수량 한정하기
         // Todo: stake 조건 체크
@@ -193,7 +187,7 @@ contract DOPE {
         userShare[msg.sender] = Share(amount, 0, false);
     }
 
-    function depositLend (uint256 amount) public virtual {
+    function depositTokenForLend (uint256 amount) public virtual {
         // Todo: deposit 가능한 시점인 지 체크
         // Todo: minimum amount 체크 (contract 생성시 등록할 수 있도록)
         // Todo: allowance 체크
@@ -208,7 +202,7 @@ contract DOPE {
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
     }
 
-    function withdrawLend () public virtual {
+    function withdrawLentToken () public virtual {
         // Todo: withdraw 가능한 시점인 지 체크 (IDO 종료이후)
         // Todo: amount 양수 체크
         // Todo: 현재 예치한 금액 체크
@@ -230,20 +224,20 @@ contract DOPE {
     }
 
     // Todo: 대출금을 받는 식으로 수정
-    function lend (uint256 loanAmount) public virtual {
+    function borrow (uint256 amount) public virtual {
         // Todo: lend 가능한 시점인 지 체크
         // Todo: 기본적인 금액 체크
         // Todo: 담보가능한 금액이 있는 지 체크
         // Todo: 현재 deposit amount 가 충분한 지 체크
         Share storage _userShare = userShare[msg.sender];
-        uint256 additionalCollateralAmount = loanAmount.mul(MAX_DEPOSIT_RATE).div(depositRate);
+        uint256 additionalCollateralAmount = amount.mul(MAX_LTV_RATE).div(ltvRate);
         uint256 remainShare = _userShare.amount.sub(_userShare.collateralAmount);
         require(remainShare >= additionalCollateralAmount, "insufficient share");
 
         // send loanAmount to user
-        IERC20(lendTokenAddress).transfer(msg.sender, loanAmount);
+        IERC20(lendTokenAddress).transfer(msg.sender, amount);
         // minus loanAmount from the totalDepsitAmount
-        totalCurrentDepositAmount = totalCurrentDepositAmount.sub(loanAmount);
+        totalCurrentDepositAmount = totalCurrentDepositAmount.sub(amount);
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
         // update the user collateralAmount;
         _userShare.collateralAmount = _userShare.collateralAmount.add(additionalCollateralAmount);
@@ -252,15 +246,15 @@ contract DOPE {
         totalRemainShareAfterDistribution = totalLockedShare;
     }
 
-    function payback(uint256 paybackAmount) public virtual {
-        // Todo: payBack 가능한 시점인 지 체크
+    function repay(uint256 amount) public virtual {
+        // Todo: repay 가능한 시점인 지 체크
         // Todo: amount 금액 체크
         // Todo: IDO 참여 여부 체크
         IERC20 token = IERC20(lendTokenAddress);
-        require(token.allowance(msg.sender, address(this)) >= paybackAmount, "insufficient token amount");
+        require(token.allowance(msg.sender, address(this)) >= amount, "insufficient token amount");
         Share storage _userShare = userShare[msg.sender];
         // 적어진 금액에서 계산하므로 실질적으로 조금 더 적은량이 unlock 됨
-        uint256 unlockCollateralAmount = paybackAmount.mul(MAX_DEPOSIT_RATE).div(depositRate);
+        uint256 unlockCollateralAmount = amount.mul(MAX_LTV_RATE).div(ltvRate);
         uint256 interestAmount = unlockCollateralAmount.mul(interestRate).div(MAX_INTEREST_RATE);
         uint256 unlockShare = unlockCollateralAmount.sub(interestAmount);
 
@@ -269,12 +263,12 @@ contract DOPE {
         totalLockedShare = totalLockedShare.sub(unlockShare);
         totalRemainShareAfterDistribution = totalLockedShare;
 
-        token.transferFrom(msg.sender, address(this), paybackAmount);
-        totalCurrentDepositAmount = totalCurrentDepositAmount.add(paybackAmount);
+        token.transferFrom(msg.sender, address(this), amount);
+        totalCurrentDepositAmount = totalCurrentDepositAmount.add(amount);
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
     }
 
-    function claimToken () public virtual {
+    function claim() public virtual {
         // Todo: swap 가능한 시기인 지 체크
         // Todo: 이미 swap 했는 지 체크
         Share storage _share = userShare[msg.sender];
