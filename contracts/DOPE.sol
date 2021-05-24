@@ -236,7 +236,6 @@ contract DOPE {
         // Todo: amount 양수 체크
         // Todo: 현재 예치한 금액 체크
         // Todo: 남은 share 할 금액이 있는 지 체크
-        IERC20 token = IERC20(lendTokenAddress);
         uint256 depositAmount = lenderDepositAmount[msg.sender];
         uint256 lenderDepositPercent = depositAmount.mul(1e18).div(totalLockedDepositAmount);
         uint256 returnDepositAmount = totalCurrentDepositAmount.mul(lenderDepositPercent).div((1e18));
@@ -245,6 +244,7 @@ contract DOPE {
         uint swapAmount = returnShareAmount.mul(exchangeRate).div(EXCHANGE_RATE);
 
         IERC20(saleTokenAddress).transfer(msg.sender, swapAmount);
+        IERC20 token = IERC20(lendTokenAddress);
         token.transfer(msg.sender, returnDepositAmount);
 
         totalRemainShareAfterDistribution = totalRemainShareAfterDistribution.sub(returnShareAmount);

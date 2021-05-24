@@ -16,8 +16,8 @@ async function deployToken (
 ): Promise<string> {
     const gasPrice = 8000000000;
     const stringGasPrice = '0x' + gasPrice.toString(16);
-    const saleTokenMintAmount = 100000000000;
-    const stringSaleTokenMintAmount = '0x' + saleTokenMintAmount.toString(16);
+    const mintAmount = 100 ** 18;
+    const stringMintAmount = '0x' + mintAmount.toString(16);
 
     await deploy(name, {
         from: owner,
@@ -25,7 +25,7 @@ async function deployToken (
         gasLimit: 8000000,
         gasPrice: stringGasPrice,
         args: [
-            tokenName, symbol, stringSaleTokenMintAmount
+            tokenName, symbol, stringMintAmount
         ],
         log: true,
         deterministicDeployment: false,
@@ -50,24 +50,25 @@ const deployDOPE: DeployFunction = async function (hre: HardhatRuntimeEnvironmen
     let saleTokenAddress = token_contracts.saleToken;
     let stableTokenAddress = token_contracts.stableToken;
     let dopeTokenAddress = token_contracts.dopeToken;
-    // Sale Token Deploy
+    // tokens Deploy
     if (saleTokenAddress == '') {
         saleTokenAddress = await deployToken(
-            deploy, get, saleToken, saleTokenOwner,"sale Token","STN"
+            deploy, get, saleToken, saleTokenOwner,"saleToken","STN"
         );
     }
     if (stableTokenAddress == '') {
         stableTokenAddress = await deployToken(
-            deploy, get, stableToken, stableTokenOwner,"stable Token","USD"
+            deploy, get, stableToken, stableTokenOwner,"stableToken","USD"
         );
     }
     if (dopeTokenAddress == '') {
         dopeTokenAddress =  await deployToken(
-            deploy, get, dopeToken, dopeOwner,"DOPE Token","DOPE"
+            deploy, get, dopeToken, dopeOwner,"DOPEToken","DOPE"
         );
     }
-    const saleTokenAmount = 50000000;
+
     // DOPE Deploy
+    const saleTokenAmount = 10 ** 10;
     const gasPrice = 8000000000;
     const stringGasPrice = '0x' + gasPrice.toString(16);
     await deploy(DOPE, {
@@ -91,12 +92,12 @@ const deployDOPE: DeployFunction = async function (hre: HardhatRuntimeEnvironmen
     let dopeDeployment = await get(DOPE);
     let tokenOwner;
     [tokenOwner] = await ethers.getSigners();
-    console.log(tokenOwner.address);
-    console.log(saleTokenOwner);
     let saleTokenContract: Contract = await ethers.getContractAt(stableToken, saleTokenAddress, tokenOwner);
     let dopeContract: Contract = await ethers.getContractAt(DOPE, dopeDeployment.address, tokenOwner);
-    console.log(await saleTokenContract.connect(tokenOwner).balanceOf(dopeDeployment.address));
+
+    console.log("approve");
     console.log(await saleTokenContract.connect(tokenOwner).approve(dopeDeployment.address, saleTokenAmount));
+    console.log("put");
     console.log(await dopeContract.connect(tokenOwner).putSaleToken());
     console.log(await saleTokenContract.connect(tokenOwner).balanceOf(dopeDeployment.address));
 
