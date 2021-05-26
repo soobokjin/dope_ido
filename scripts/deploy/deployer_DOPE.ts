@@ -16,7 +16,7 @@ async function deployToken (
 ): Promise<string> {
     const gasPrice = 8000000000;
     const stringGasPrice = '0x' + gasPrice.toString(16);
-    const mintAmount = 100 ** 18;
+    const mintAmount = 1000 ** 18;
     const stringMintAmount = '0x' + mintAmount.toString(16);
 
     await deploy(name, {

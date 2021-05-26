@@ -3,12 +3,13 @@ pragma solidity ^0.8.0;
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import "hardhat/console.sol";
 
 // contract 에서는 erc token 의 decimals 에 대해서 고려하지 않는다. (호출자 책임)
-
+// Todo: Ownable 조
+// Todo: initializing DOPE
 // Todo: code refactoring
 // Todo: method define
-// Todo: event
 // Todo: modifier, require
 // Todo: safeMath 적용
 
@@ -34,6 +35,65 @@ contract DOPE {
     using SafeMath for uint8;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
+
+    event Staked(
+        address indexed user,
+        uint256 stakeAmount,
+        uint256 totalStakedAmount,
+        uint256 blockNumber
+    );
+
+    event UnStaked(
+        address indexed user,
+        uint256 unStakeAmount,
+        uint256 totalStakedAmount,
+        uint256 blockNumber
+    );
+
+    event Funded(
+        address indexed user,
+        uint256 amount
+    );
+
+    event Deposit(
+        address indexed user,
+        uint256 amount,
+        uint256 totalDepositAmount
+    );
+
+    event Withdraw(
+        address indexed user,
+        uint256 amount
+    );
+
+    event Claimed(
+        address indexed user,
+        uint256 amount
+    );
+
+    event Borrow(
+        address indexed user,
+        uint256 amount
+    );
+
+    event CollateralIncreased(
+        address indexed user,
+        uint256 collateralAmount,
+        uint256 totalCollateralAmount
+    );
+
+    event CollateralDecreased(
+        address indexed user,
+        uint256 collateralAmount,
+        uint256 totalCollateralAmount
+    );
+
+    event Repay(
+        address indexed user,
+        uint256 repayAmount,
+        uint256 interestAmount,
+        uint256 totalShareAmount
+    );
 
     uint32 constant EXCHANGE_RATE = 10 ** 6;
     // 소수점 둘 째 자리까지 표현
@@ -186,9 +246,13 @@ contract DOPE {
 
             userStakeAmountByBlockNum[sender][blockNumber] = lastStakedAmount.add(amount);
         }
+
+        emit Staked(
+            msg.sender, amount, userStakeAmountByBlockNum[sender][blockNumber], blockNumber
+        );
     }
 
-    function unStake (uint amount) public virtual {
+    function unStake (uint256 amount) public virtual {
         address sender = msg.sender;
         uint256 blockNumber = block.number;
         require(amount > 0, "invalid amount. should be positive value");
@@ -203,6 +267,10 @@ contract DOPE {
         token.transfer(msg.sender, amount);
         userStakeChangedBlockNums[sender].push(blockNumber);
         userStakeAmountByBlockNum[sender][blockNumber] = stakedAmount.sub(amount);
+
+        emit UnStaked(
+            msg.sender, amount, userStakeAmountByBlockNum[sender][blockNumber], blockNumber
+        );
     }
 
     function fundSaleToken (uint amount) public virtual {
@@ -214,6 +282,8 @@ contract DOPE {
         IERC20 fromToken = IERC20(exchangeTokenAddress);
         fromToken.transferFrom(msg.sender, treasuryAddress, amount);
         userShare[msg.sender] = Share(amount, 0, false);
+
+        emit Funded(msg.sender, amount);
     }
 
     function depositTokenForLend (uint256 amount) public virtual {
@@ -229,6 +299,10 @@ contract DOPE {
         totalLockedDepositAmount = totalLockedDepositAmount.add(amount);
         totalCurrentDepositAmount = totalLockedDepositAmount;
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
+
+        emit Deposit(
+            msg.sender, amount, lenderDepositAmount[msg.sender]
+        );
     }
 
     function withdrawLentToken () public virtual {
@@ -242,7 +316,8 @@ contract DOPE {
         uint256 returnShareAmount = totalLockedShare.mul(lenderDepositPercent).div(1e18);
         // Todo: solidity 의 percent 처리 확인하기
         uint swapAmount = returnShareAmount.mul(exchangeRate).div(EXCHANGE_RATE);
-
+        console.log(swapAmount);
+        console.log(returnDepositAmount);
         IERC20(saleTokenAddress).transfer(msg.sender, swapAmount);
         IERC20 token = IERC20(lendTokenAddress);
         token.transfer(msg.sender, returnDepositAmount);
@@ -250,6 +325,13 @@ contract DOPE {
         totalRemainShareAfterDistribution = totalRemainShareAfterDistribution.sub(returnShareAmount);
         totalRemainDepositAmountAfterDistribution = totalRemainDepositAmountAfterDistribution.sub(returnDepositAmount);
         lenderDepositAmount[msg.sender] = 0;
+
+        emit Withdraw(
+            msg.sender, returnDepositAmount
+        );
+        emit Claimed(
+            msg.sender, swapAmount
+        );
     }
 
     // Todo: 대출금을 받는 식으로 수정
@@ -273,6 +355,13 @@ contract DOPE {
         // update the totalLockedShare;
         totalLockedShare = totalLockedShare.add(additionalCollateralAmount);
         totalRemainShareAfterDistribution = totalLockedShare;
+
+        emit Borrow(
+            msg.sender, amount
+        );
+        emit CollateralIncreased(
+            msg.sender, additionalCollateralAmount, _userShare.collateralAmount
+        );
     }
 
     function repay(uint256 amount) public virtual {
@@ -295,6 +384,14 @@ contract DOPE {
         token.transferFrom(msg.sender, address(this), amount);
         totalCurrentDepositAmount = totalCurrentDepositAmount.add(amount);
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
+
+        emit Repay(
+            msg.sender, amount, interestAmount, _userShare.amount
+        );
+        emit CollateralDecreased(
+            msg.sender, unlockCollateralAmount, _userShare.collateralAmount
+        );
+
     }
 
     function claim() public virtual {
@@ -307,5 +404,7 @@ contract DOPE {
 
         IERC20(saleTokenAddress).transfer(msg.sender, swapAmount);
         _share.isSwapped = true;
+
+        emit Claimed(msg.sender, swapAmount);
     }
 }
