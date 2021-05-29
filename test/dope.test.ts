@@ -19,11 +19,23 @@ describe("DOPE", () => {
 
     let DOPE: ContractFactory;
     let saleToken: ContractFactory;
+    let Period: ContractFactory;
 
     let dopeContract: Contract;
     let saleTokenContract: Contract;
     let stableTokenContract: Contract;
     let dopeTokenContract: Contract;
+    let PeriodContract: Contract;
+
+    let startStakeBlockNum: number = 0;
+    let endStakeBlockNum: number = 19;
+    let startFundBlockNum: number = endStakeBlockNum + 1;
+    let endFundBlockNum: number = startFundBlockNum + 19;
+    let startDepositLoanBlockNum: number = endFundBlockNum + 1;
+    let endDepositLoanBlockNum: number = startDepositLoanBlockNum + 19;
+    let startBorrowBlockNum: number = endDepositLoanBlockNum + 1;
+    let endBorrowBlockNum: number = startBorrowBlockNum + 19;
+    let startClaimBlockNum: number = endBorrowBlockNum + 1;
 
     before("Setup accounts", async () => {
        [tokenOwner, dopeOwner, investor, lender] = await ethers.getSigners();
@@ -54,6 +66,22 @@ describe("DOPE", () => {
         await stableTokenContract.connect(tokenOwner).transfer(lender.address, lenderTokenAmount)
     });
 
+    before("fetch period contract factory", async () => {
+       Period = await ethers.getContractFactory('IDOPeriod');
+       PeriodContract = await Period.connect(dopeOwner).deploy(
+           startStakeBlockNum,
+           endStakeBlockNum,
+           startFundBlockNum,
+           endFundBlockNum,
+           startDepositLoanBlockNum,
+           endDepositLoanBlockNum,
+           startBorrowBlockNum,
+           endBorrowBlockNum,
+           startClaimBlockNum
+       );
+    });
+
+
     before("fetch dope contract factories", async () => {
        DOPE = await ethers.getContractFactory('DOPE');
        dopeContract = await DOPE.connect(dopeOwner).deploy(
@@ -63,6 +91,7 @@ describe("DOPE", () => {
             stableTokenContract.address,
             tokenOwner.address,
             dopeTokenContract.address,
+            PeriodContract.address,
             10 ** 6,
             1000,
             5000,
@@ -76,10 +105,11 @@ describe("DOPE", () => {
     it("stake and unStake", async () => {
         await dopeTokenContract.connect(tokenOwner).approve(dopeContract.address, 1000);
         await dopeContract.connect(tokenOwner).stake(1000);
-        expect(await dopeContract.getStakeAmountOf(tokenOwner.address)).to.eq(1000);
-
+        await expect(await dopeContract.getStakeAmountOf(tokenOwner.address)).to.eq(1000);
         await dopeContract.connect(tokenOwner).unStake(1000);
-        expect(await dopeContract.getStakeAmountOf(tokenOwner.address)).to.eq(0);
+        await expect(await dopeContract.getStakeAmountOf(tokenOwner.address)).to.eq(0);
+        await accumulateBlockByBlockNumber(startFundBlockNum);
+        await expect(dopeContract.connect(tokenOwner).stake(1000)).to.be.revertedWith("not in stake period");
     });
 
     it("deposit token and lend token from it", async () => {

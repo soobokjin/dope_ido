@@ -10,13 +10,20 @@ struct Period {
     uint256 end;
 }
 
-enum Phase { Stake, Fund, DepositLoan, Borrow, Claim }
-
-
 // Todo: 각 period 간 시점 check
 // Todo: period 변경 setter
 
+interface IIDOPeriod {
+    enum Phase { Stake, Fund, DepositLoan, Borrow, Claim }
+
+    function getStartAndEndPhaseOf(Phase phase) external view returns (uint256, uint256);
+    function getCurrentPhases() external view returns (bool[] memory);
+    function phaseIn(Phase phase) external view returns (bool);
+}
+
 contract IDOPeriod is Context, Ownable {
+    enum Phase { Stake, Fund, DepositLoan, Borrow, Claim }
+
     Phase[5] private _phases = [Phase.Stake, Phase.Fund, Phase.DepositLoan, Phase.Borrow, Phase.Claim];
     mapping (Phase => Period) private _phasePeriod;
 
@@ -47,11 +54,11 @@ contract IDOPeriod is Context, Ownable {
         _phasePeriod[Phase.Claim] = Period(_startClaimBlockNum, 2**256 - 1);
     }
 
-    function getStartAndEndPhaseOf (Phase phase) public view returns (uint256, uint256) {
+    function getStartAndEndPhaseOf (Phase phase) external virtual view returns (uint256, uint256) {
         return (_phasePeriod[phase].start, _phasePeriod[phase].end);
     }
 
-    function getCurrentPhases() public view returns (bool[] memory) {
+    function getCurrentPhases() external virtual view returns (bool[] memory) {
         bool[] memory phases = new bool[](_phases.length);
 
         for (uint8 i=0; i < _phases.length; i++ ) {
@@ -59,11 +66,10 @@ contract IDOPeriod is Context, Ownable {
                 phases[i]= true;
             }
         }
-
         return phases;
     }
 
-    function phaseIn (Phase phase) public view returns (bool) {
+    function phaseIn (Phase phase) external virtual view returns (bool) {
         return (block.number >= _phasePeriod[phase].start && block.number <= _phasePeriod[phase].end);
     }
 

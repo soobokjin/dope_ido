@@ -3,25 +3,16 @@ pragma solidity ^0.8.0;
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import {IIDOPeriod} from "./utils/Period.sol";
 import "hardhat/console.sol";
 
 // contract 에서는 erc token 의 decimals 에 대해서 고려하지 않는다. (호출자 책임)
-// Todo: Ownable 조
+// Todo: Ownable 적용
 // Todo: initializing DOPE
 // Todo: code refactoring
 // Todo: method define
 // Todo: modifier, require
-// Todo: safeMath 적용
 
-
-struct Period {
-    uint startIDOBlockNum;
-    uint startFundBlockNum;
-    uint endFundBlockNum;
-    uint startDepositLoanBlockNum;
-    uint endDepositLoanBlockNum;
-    uint endIDOBlockNum;
-}
 
 struct Share {
     // amount 는 Swap 시점의 USDT 량과 동일
@@ -132,33 +123,38 @@ contract DOPE {
     // 대출금 모집 이후 Fix 된 금액
     mapping (address => uint256) lenderDepositAmount;
 
-    Period public iDOPeriod;
+    IIDOPeriod public idoPeriod;
 
     constructor (
-        string memory saleTokenName_,
-        address saleTokenAddress_,
-        uint256 saleTokenAmount_,
-        address exchangeTokenAddress_,
-        address treasuryAddress_,
-        address stakeTokenAddress_,
-        uint256 exchangeRate_,
-        // 소수점 둘 째 자리까지 표현. e.g. 50% -> 5000, 3.12% -> 312
-        uint256 interestRate_,
-        uint256 ltvRate_
+        string memory _saleTokenName,
+        address _saleTokenAddress,
+        uint256 _saleTokenAmount,
+        address _exchangeTokenAddress,
+        address _treasuryAddress,
+        address _stakeTokenAddress,
+        address _periodAddress,
+        uint256 _exchangeRate,
+        uint256 _interestRate,
+        uint256 _ltvRate
+            // 소수점 둘 째 자리까지 표현. e.g. 50% -> 5000, 3.12% -> 312
+
     ) {
         // Todo: Rate 가 10000 을 넘길 수 없음
         _admins.push(msg.sender);
+        saleTokenName = _saleTokenName;
+        saleTokenAddress = _saleTokenAddress;
+        saleTokenAmount = _saleTokenAmount;
 
-        saleTokenName = saleTokenName_;
-        saleTokenAddress = saleTokenAddress_;
-        saleTokenAmount = saleTokenAmount_;
-        exchangeTokenAddress = exchangeTokenAddress_;
-        exchangeRate = exchangeRate_;
-        treasuryAddress = treasuryAddress_;
-        stakeTokenAddress = stakeTokenAddress_;
-        interestRate = interestRate_;
-        ltvRate = ltvRate_;
-        lendTokenAddress = exchangeTokenAddress_;
+        exchangeTokenAddress = _exchangeTokenAddress;
+        treasuryAddress = _treasuryAddress;
+        stakeTokenAddress = _stakeTokenAddress;
+        lendTokenAddress = _exchangeTokenAddress;
+        idoPeriod = IIDOPeriod(_periodAddress);
+
+        exchangeRate = _exchangeRate;
+        interestRate = _interestRate;
+        ltvRate = _ltvRate;
+
     }
 
     // -------------------- public getters -----------------------
@@ -192,26 +188,6 @@ contract DOPE {
     }
 
     // -------------------- public set methods ------------------------
-    function setPeriods (
-        uint _startIDOBlockNum,
-        uint _startFundBlockNum,
-        uint _endFundBlockNum,
-        uint _startDepositLoanBlockNum,
-        uint _endDepositLoanBlockNum,
-        uint _endIDOBlockNum
-    ) public virtual returns (bool) {
-        // Todo: validate all numbers
-        // Todo: only owner can set the period
-        iDOPeriod = Period(
-            _startIDOBlockNum,
-            _startFundBlockNum,
-            _endFundBlockNum,
-            _startDepositLoanBlockNum,
-            _endDepositLoanBlockNum,
-            _endIDOBlockNum
-        );
-        return true;
-    }
 
     function getStakeAmountOf (address user) public view returns (uint256) {
         uint256 length = userStakeChangedBlockNums[user].length;
@@ -223,6 +199,7 @@ contract DOPE {
     }
 
     function stake (uint256 amount) public virtual {
+        require(idoPeriod.phaseIn(IIDOPeriod.Phase.Stake), "not in stake period");
         require(amount > 0, "invalid amount. should be positive value");
         // Todo: 최소 lockup 개수 체크
         // Todo: amount 만큼 가져올 수 있는 지 체크
