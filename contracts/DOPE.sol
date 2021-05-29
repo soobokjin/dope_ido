@@ -24,6 +24,7 @@ struct Share {
 contract DOPE {
     using SafeMath for uint;
     using SafeMath for uint8;
+    using SafeMath for uint32;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
@@ -94,10 +95,12 @@ contract DOPE {
     address[] private _admins;
     string public saleTokenName;
     address public saleTokenAddress;
-    // 전체 판매 금액
-    uint public saleTokenAmount;
 
-    // swap 관련
+    // Funding 관련
+    uint256 public saleTokenAmount;
+    uint256 public totalFundedAmount;
+    uint32 public totalBacker;
+    uint256 public maxAllocationPerUser;
     address public exchangeTokenAddress;
     // Todo: 정수로 소수 계산하도록 하기
     uint256 exchangeRate;
@@ -133,6 +136,7 @@ contract DOPE {
         address _treasuryAddress,
         address _stakeTokenAddress,
         address _periodAddress,
+        uint256 _maxAllocationPerUser,
         uint256 _exchangeRate,
         uint256 _interestRate,
         uint256 _ltvRate
@@ -151,17 +155,22 @@ contract DOPE {
         lendTokenAddress = _exchangeTokenAddress;
         idoPeriod = IIDOPeriod(_periodAddress);
 
+        maxAllocationPerUser = _maxAllocationPerUser;
         exchangeRate = _exchangeRate;
         interestRate = _interestRate;
         ltvRate = _ltvRate;
-
     }
 
     // -------------------- public getters -----------------------
-    function putSaleToken() public virtual {
+    function setSaleToken() public {
+        // Todo: fallback 으로 수정 고려
         IERC20 token = IERC20(saleTokenAddress);
-        require(token.allowance(treasuryAddress, address(this)) >= saleTokenAmount, "insufficient");
+        require(token.allowance(treasuryAddress, address(this)) == saleTokenAmount, "insufficient");
         token.transferFrom(treasuryAddress, address(this), saleTokenAmount);
+    }
+
+    function getTargetFundingAmount() public view returns (uint256) {
+        return saleTokenAmount.mul(EXCHANGE_RATE).div(exchangeRate);
     }
 
     // stake
@@ -187,18 +196,40 @@ contract DOPE {
         return lenderDepositAmount[user];
     }
 
-    // -------------------- public set methods ------------------------
-
-    function getStakeAmountOf (address user) public view returns (uint256) {
-        uint256 length = userStakeChangedBlockNums[user].length;
-        if (length == 0) {
-            return 0;
-        }
-        uint256 lastBlockNumber = userStakeChangedBlockNums[user][length - 1];
-        return userStakeAmountByBlockNum[user][lastBlockNumber];
+    function getExpectedExchangeAmount(uint256 amount) public view returns (uint256) {
+        return amount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
-    function stake (uint256 amount) public virtual {
+    function getExpectedRepayInterest(address user, uint256 amount) public view returns (uint256, uint256, uint256) {
+        // Todo: 함수로 중복 구현 제거
+        uint256 unlockCollateralAmount = amount.mul(MAX_LTV_RATE).div(ltvRate);
+        uint256 interestAmount = unlockCollateralAmount.mul(interestRate).div(MAX_INTEREST_RATE);
+
+        return (
+        interestRate,
+        interestAmount.mul(exchangeRate).div(EXCHANGE_RATE),
+        userShare[user].amount.sub(interestAmount)
+        );
+    }
+
+    function getMaxBorrowAmount(address user) public view returns (uint256) {
+        // Todo: 0 원 처리
+        uint256 remainShare = userShare[user].amount.sub(userShare[user].collateralAmount);
+        return remainShare.mul(ltvRate).div(MAX_LTV_RATE);
+    }
+
+    function getExpectedCollateralAmount(address user, uint256 amount) public view returns (
+        uint256, uint256
+    ) {
+        uint256 expectedCollateralAmount = amount.mul(MAX_LTV_RATE).div(ltvRate);
+        uint256 interestAmount = expectedCollateralAmount.mul(interestRate).div(MAX_INTEREST_RATE);
+
+        return (expectedCollateralAmount, interestAmount);
+    }
+
+    // -------------------- public set methods ------------------------
+
+    function stake (uint256 amount) public {
         require(idoPeriod.phaseIn(IIDOPeriod.Phase.Stake), "not in stake period");
         require(amount > 0, "invalid amount. should be positive value");
         // Todo: 최소 lockup 개수 체크
@@ -229,7 +260,7 @@ contract DOPE {
         );
     }
 
-    function unStake (uint256 amount) public virtual {
+    function unStake (uint256 amount) public {
         address sender = msg.sender;
         uint256 blockNumber = block.number;
         require(amount > 0, "invalid amount. should be positive value");
@@ -250,20 +281,24 @@ contract DOPE {
         );
     }
 
-    function fundSaleToken (uint amount) public virtual {
+    function fundSaleToken (uint amount) public {
         // Todo: swap 가능한 시기인 지 체크
-        // Todo: 한 개인이 최대 구매가능한 수량 한정하기
+        // Todo: 한 개인이 최대 구매가능한 수량 한정하기 (maxAllocationPerUser)
         // Todo: stake 조건 체크
         // Todo: whitelist 여부 체크
+        // Todo: backer 기록
 
         IERC20 fromToken = IERC20(exchangeTokenAddress);
         fromToken.transferFrom(msg.sender, treasuryAddress, amount);
         userShare[msg.sender] = Share(amount, 0, false);
 
+        totalFundedAmount = totalFundedAmount.add(amount);
+        totalBacker = uint32(totalBacker.add(1));
+
         emit Funded(msg.sender, amount);
     }
 
-    function depositTokenForLend (uint256 amount) public virtual {
+    function depositTokenForLend (uint256 amount) public {
         // Todo: deposit 가능한 시점인 지 체크
         // Todo: minimum amount 체크 (contract 생성시 등록할 수 있도록)
         // Todo: allowance 체크
@@ -282,7 +317,7 @@ contract DOPE {
         );
     }
 
-    function withdrawLentToken () public virtual {
+    function withdrawLentToken () public {
         // Todo: withdraw 가능한 시점인 지 체크 (IDO 종료이후)
         // Todo: amount 양수 체크
         // Todo: 현재 예치한 금액 체크
@@ -312,7 +347,7 @@ contract DOPE {
     }
 
     // Todo: 대출금을 받는 식으로 수정
-    function borrow (uint256 amount) public virtual {
+    function borrow (uint256 amount) public {
         // Todo: lend 가능한 시점인 지 체크
         // Todo: 기본적인 금액 체크
         // Todo: 담보가능한 금액이 있는 지 체크
@@ -341,7 +376,7 @@ contract DOPE {
         );
     }
 
-    function repay(uint256 amount) public virtual {
+    function repay(uint256 amount) public {
         // Todo: repay 가능한 시점인 지 체크
         // Todo: amount 금액 체크
         // Todo: IDO 참여 여부 체크
@@ -371,7 +406,7 @@ contract DOPE {
 
     }
 
-    function claim() public virtual {
+    function claim() public {
         // Todo: swap 가능한 시기인 지 체크
         // Todo: 이미 swap 했는 지 체크
         Share storage _share = userShare[msg.sender];

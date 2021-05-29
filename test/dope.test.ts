@@ -92,12 +92,13 @@ describe("DOPE", () => {
             tokenOwner.address,
             dopeTokenContract.address,
             PeriodContract.address,
+            100000000000,
             10 ** 6,
             1000,
             5000,
        );
        await saleTokenContract.connect(tokenOwner).approve(dopeContract.address, saleTokenMintAmount);
-       await dopeContract.connect(tokenOwner).putSaleToken();
+       await dopeContract.connect(tokenOwner).setSaleToken();
        expect(await saleTokenContract.balanceOf(tokenOwner.address)).to.eq(0);
        expect(await saleTokenContract.balanceOf(dopeContract.address)).to.eq(10000000000);
     });
@@ -105,9 +106,9 @@ describe("DOPE", () => {
     it("stake and unStake", async () => {
         await dopeTokenContract.connect(tokenOwner).approve(dopeContract.address, 1000);
         await dopeContract.connect(tokenOwner).stake(1000);
-        await expect(await dopeContract.getStakeAmountOf(tokenOwner.address)).to.eq(1000);
+        await expect(await dopeContract.getCurrentStakeAmount(tokenOwner.address)).to.eq(1000);
         await dopeContract.connect(tokenOwner).unStake(1000);
-        await expect(await dopeContract.getStakeAmountOf(tokenOwner.address)).to.eq(0);
+        await expect(await dopeContract.getCurrentStakeAmount(tokenOwner.address)).to.eq(0);
         await accumulateBlockByBlockNumber(startFundBlockNum);
         await expect(dopeContract.connect(tokenOwner).stake(1000)).to.be.revertedWith("not in stake period");
     });
