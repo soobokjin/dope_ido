@@ -218,7 +218,7 @@ contract DOPE {
         return remainShare.mul(ltvRate).div(MAX_LTV_RATE);
     }
 
-    function getExpectedCollateralAmount(address user, uint256 amount) public view returns (
+    function getExpectedCollateralAmount(uint256 amount) public view returns (
         uint256, uint256
     ) {
         uint256 expectedCollateralAmount = amount.mul(MAX_LTV_RATE).div(ltvRate);
