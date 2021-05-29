@@ -13,9 +13,16 @@ struct Period {
 enum Phase { Stake, Fund, DepositLoan, Borrow, Claim }
 
 
+// Todo: 각 period 간 시점 check
+// Todo: period 변경 setter
+
 contract IDOPeriod is Context, Ownable {
     Phase[5] private _phases = [Phase.Stake, Phase.Fund, Phase.DepositLoan, Phase.Borrow, Phase.Claim];
     mapping (Phase => Period) private _phasePeriod;
+
+    function isValidPeriod(uint256 start, uint256 end) internal pure returns (bool) {
+        return (start <= end);
+    }
 
     constructor (
         uint256 _startStakeBlockNum,
@@ -28,6 +35,11 @@ contract IDOPeriod is Context, Ownable {
         uint256 _endBorrowBlockNum,
         uint256 _startClaimBlockNum
     ) {
+        require(isValidPeriod(_startStakeBlockNum, _endStakeBlockNum), 'invalid stake period');
+        require(isValidPeriod(_startFundBlockNum, _endFundBlockNum), 'invalid fund period');
+        require(isValidPeriod(_startDepositLoanBlockNum, _endDepositLoanBlockNum), 'invalid deposit period');
+        require(isValidPeriod(_startBorrowBlockNum, _endBorrowBlockNum), 'invalid borrow period');
+
         _phasePeriod[Phase.Stake] = Period(_startStakeBlockNum, _endStakeBlockNum);
         _phasePeriod[Phase.Fund] = Period(_startFundBlockNum, _endFundBlockNum);
         _phasePeriod[Phase.DepositLoan] = Period(_startDepositLoanBlockNum, _endDepositLoanBlockNum);
@@ -51,7 +63,7 @@ contract IDOPeriod is Context, Ownable {
         return phases;
     }
 
-    function isPhaseIn (Phase phase) public view returns (bool) {
+    function phaseIn (Phase phase) public view returns (bool) {
         return (block.number >= _phasePeriod[phase].start && block.number <= _phasePeriod[phase].end);
     }
 
