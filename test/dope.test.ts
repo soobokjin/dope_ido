@@ -1,13 +1,13 @@
-import { ethers, network } from "hardhat";
+import {ethers, network} from "hardhat";
 import chai from "chai";
-import { solidity } from "ethereum-waffle";
-import { Contract, ContractFactory } from "ethers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
-import { accumulateBlockByBlockNumber, accumulateBlockByBlockCnt } from "./utils";
+import {solidity} from "ethereum-waffle";
+import {Contract, ContractFactory} from "ethers";
+import {SignerWithAddress} from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
+import {accumulateBlockByBlockNumber, accumulateBlockByBlockCnt} from "./utils";
 import {deflateRawSync} from "zlib";
 
 chai.use(solidity);
-const { expect } = chai;
+const {expect} = chai;
 
 describe("DOPE", () => {
 
@@ -19,6 +19,8 @@ describe("DOPE", () => {
 
     let DOPE: ContractFactory;
     let saleToken: ContractFactory;
+    let stake: ContractFactory;
+    let lend: ContractFactory;
     let Period: ContractFactory;
 
     let dopeContract: Contract;
@@ -26,6 +28,8 @@ describe("DOPE", () => {
     let stableTokenContract: Contract;
     let dopeTokenContract: Contract;
     let PeriodContract: Contract;
+    let stakeContract: Contract;
+    let lendContract: Contract;
 
     let startStakeBlockNum: number = 0;
     let endStakeBlockNum: number = 19;
@@ -38,22 +42,22 @@ describe("DOPE", () => {
     let startClaimBlockNum: number = endBorrowBlockNum + 1;
 
     before("Setup accounts", async () => {
-       [tokenOwner, dopeOwner, investor, lender] = await ethers.getSigners();
+        [tokenOwner, dopeOwner, investor, lender] = await ethers.getSigners();
     });
 
     before("fetch token contract factories", async () => {
-       saleToken = await ethers.getContractFactory('ERC20Mintable');
-       saleTokenContract = await saleToken.connect(tokenOwner).deploy(
+        saleToken = await ethers.getContractFactory('ERC20Mintable');
+        saleTokenContract = await saleToken.connect(tokenOwner).deploy(
             "saleToken",
             "STN",
             saleTokenMintAmount
         );
-       stableTokenContract = await saleToken.connect(tokenOwner).deploy(
+        stableTokenContract = await saleToken.connect(tokenOwner).deploy(
             "stableToken",
             "USD",
             saleTokenMintAmount
         );
-       dopeTokenContract = await saleToken.connect(tokenOwner).deploy(
+        dopeTokenContract = await saleToken.connect(tokenOwner).deploy(
             "DOPEToken",
             "DOPE",
             saleTokenMintAmount
@@ -66,41 +70,55 @@ describe("DOPE", () => {
         await stableTokenContract.connect(tokenOwner).transfer(lender.address, lenderTokenAmount)
     });
 
-    before("fetch period contract factory", async () => {
-       Period = await ethers.getContractFactory('IDOPeriod');
-       PeriodContract = await Period.connect(dopeOwner).deploy(
-           startStakeBlockNum,
-           endStakeBlockNum,
-           startFundBlockNum,
-           endFundBlockNum,
-           startDepositLoanBlockNum,
-           endDepositLoanBlockNum,
-           startBorrowBlockNum,
-           endBorrowBlockNum,
-           startClaimBlockNum
-       );
+    before("fetch other contract factory", async () => {
+        Period = await ethers.getContractFactory('IDOPeriod');
+        stake = await ethers.getContractFactory('Stake');
+        lend = await ethers.getContractFactory('Lend');
+        PeriodContract = await Period.connect(dopeOwner).deploy(
+            startStakeBlockNum,
+            endStakeBlockNum,
+            startFundBlockNum,
+            endFundBlockNum,
+            startDepositLoanBlockNum,
+            endDepositLoanBlockNum,
+            startBorrowBlockNum,
+            endBorrowBlockNum,
+            startClaimBlockNum
+        );
+        stakeContract = await stake.connect(dopeOwner).deploy(
+            dopeTokenContract.address,
+            0,
+            0
+        );
+        lendContract = await lend.connect(dopeOwner).deploy(
+            stableTokenContract.address,
+            10000000,
+            10000000
+        );
     });
 
-
     before("fetch dope contract factories", async () => {
-       DOPE = await ethers.getContractFactory('DOPE');
-       dopeContract = await DOPE.connect(dopeOwner).deploy(
+        DOPE = await ethers.getContractFactory('DOPE');
+        dopeContract = await DOPE.connect(dopeOwner).deploy(
             'STN',
             saleTokenContract.address,
             saleTokenMintAmount,
             stableTokenContract.address,
             tokenOwner.address,
-            dopeTokenContract.address,
-            PeriodContract.address,
             100000000000,
             10 ** 6,
             1000,
             5000,
-       );
-       await saleTokenContract.connect(tokenOwner).approve(dopeContract.address, saleTokenMintAmount);
-       await dopeContract.connect(tokenOwner).setSaleToken();
-       expect(await saleTokenContract.balanceOf(tokenOwner.address)).to.eq(0);
-       expect(await saleTokenContract.balanceOf(dopeContract.address)).to.eq(10000000000);
+        );
+        await saleTokenContract.connect(tokenOwner).approve(dopeContract.address, saleTokenMintAmount);
+        await dopeContract.connect(tokenOwner).setDopeContracts(
+            stakeContract.address,
+            lendContract.address,
+            PeriodContract.address,
+        );
+        await dopeContract.connect(tokenOwner).setSaleToken();
+        expect(await saleTokenContract.balanceOf(tokenOwner.address)).to.eq(0);
+        expect(await saleTokenContract.balanceOf(dopeContract.address)).to.eq(10000000000);
     });
 
     it("stake and unStake", async () => {

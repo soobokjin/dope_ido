@@ -6,15 +6,17 @@ import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 
 interface ILend {
+    function repayLentTokenFrom (uint amount) external;
+    function getDepositedAmount(address user) external returns (uint256);
     function deposit (uint256 amount) external;
-    function withdraw (uint256 amount) external;
-    function sendLentTokenTo (uint256 startBlockNum, uint256 endBlockNum) external returns (bool);
-    function repayLentTokenFrom (uint amount) public;
-    function getDepositedAmount(address user) public view returns (uint256);
+    function withdraw () external returns (uint256, uint256);
+    function sendLentTokenTo (uint256 amount) external;
+
 }
 
 
 contract Lend {
+    using SafeERC20 for IERC20;
     using SafeMath for uint256;
     using SafeMath for uint32;
 
@@ -52,11 +54,11 @@ contract Lend {
         maxTotalAllocation = _maxTotalAllocation;
         maxUserAllocation = _maxUserAllocation;
     }
-    function getDepositedAmount(address user) public view returns (uint256) {
+    function getDepositedAmount(address user) public returns (uint256) {
         return lenderDepositAmount[user];
     }
 
-    function isFilled () private pure returns (bool) {
+    function isFilled () private returns (bool) {
         return (maxTotalAllocation == totalLockedDepositAmount);
     }
 
@@ -67,13 +69,13 @@ contract Lend {
         require(!isFilled(), "exceed max allocation");
         require(remainUserAllocation > 0, "exceed max user allocation");
         require(lendToken.allowance(tx.origin, address(this)) >= amount, "insufficient");
-        actualAmount = remainAllocation >= amount ? amount : remainAllocation;
+        uint256 actualAmount = remainAllocation >= amount ? amount : remainAllocation;
         actualAmount = remainUserAllocation >= actualAmount ? actualAmount : remainUserAllocation;
 
         lendToken.safeTransferFrom(sender, address(this), actualAmount);
 
         if (lenderDepositAmount[sender] == 0) {
-            totalLender = totalLender.add();
+            totalLender = uint32(totalLender.add(1));
         }
         lenderDepositAmount[sender] = lenderDepositAmount[sender].add(actualAmount);
         totalLockedDepositAmount = totalLockedDepositAmount.add(actualAmount);
@@ -115,7 +117,7 @@ contract Lend {
         address sender = tx.origin;
         require(lendToken.allowance(sender, address(this)) >= amount, "insufficient token amount");
 
-        token.transferFrom(sender, address(this), amount);
+        lendToken.transferFrom(sender, address(this), amount);
         totalCurrentDepositAmount = totalCurrentDepositAmount.add(amount);
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
     }

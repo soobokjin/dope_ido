@@ -95,20 +95,15 @@ contract DOPE {
 
     constructor (
         string memory _saleTokenName,
-
         address _saleTokenAddress,
         uint256 _saleTokenAmount,
-
         address _exchangeTokenAddress,
         address _treasuryAddress,
-        address _stakeAddress,
-        address _periodAddress,
         uint256 _maxUserFundingAllocation,
         uint256 _exchangeRate,
         uint256 _interestRate,
         uint256 _ltvRate
             // 소수점 둘 째 자리까지 표현. e.g. 50% -> 5000, 3.12% -> 312
-
     ) {
         // Todo: Rate 가 10000 을 넘길 수 없음
         // Check Todo: 설정은 무조건 우리만 변경가능?
@@ -122,16 +117,21 @@ contract DOPE {
         saleToken = IERC20(_saleTokenAddress);
         exchangeToken = IERC20(_exchangeTokenAddress);
 
-        stakeContract = IStake(_stakeAddress);
-        lendContract = ILend(_exchangeTokenAddress);
-        periodContract = IIDOPeriod(_periodAddress);
-
         maxUserFundingAllocation = _maxUserFundingAllocation;
         exchangeRate = _exchangeRate;
         interestRate = _interestRate;
         ltvRate = _ltvRate;
     }
 
+    function setDopeContracts (
+        address _stakeAddress,
+        address _lendAddress,
+        address _periodAddress
+    ) public {
+        stakeContract = IStake(_stakeAddress);
+        lendContract = ILend(_lendAddress);
+        periodContract = IIDOPeriod(_periodAddress);
+    }
     // -------------------- public getters -----------------------
     function setSaleToken() public {
         // Todo: fallback 으로 수정 고려
@@ -157,8 +157,9 @@ contract DOPE {
     }
 
     // lend
-    function getDepositedAmount(address user) public view returns (uint256) {
-        return lendContract.getDepositedAmount(user);
+    function getDepositedAmount(address user) public returns (uint256) {
+        uint256 amount = lendContract.getDepositedAmount(user);
+        return amount;
     }
 
     function getExpectedExchangeAmount(uint256 amount) public view returns (uint256) {
@@ -213,8 +214,8 @@ contract DOPE {
         // Todo: stake 조건 체크
         // Todo: whitelist 여부 체크
         // Todo: backer 기록
-
-        uint256 (start, end) = periodContract.getStartAndEndPhaseOf(IIDOPeriod.Phase.Stake);
+        uint256 start; uint256 end;
+        (start, end) = periodContract.getStartAndEndPhaseOf(IIDOPeriod.Phase.Stake);
         require(stakeContract.isSatisfied(start, end), "not permission: stake");
 
         exchangeToken.safeTransferFrom(msg.sender, treasuryAddress, amount);
@@ -237,7 +238,9 @@ contract DOPE {
         // Todo: 현재 예치한 금액 체크
         // Todo: 남은 share 할 금액이 있는 지 체크
         address sender = msg.sender;
-        uint256 (lenderDepositPercent, percentRate) = lendContract.withdraw();
+        uint256 lenderDepositPercent;
+        uint256 percentRate;
+        (lenderDepositPercent, percentRate) = lendContract.withdraw();
         uint256 returnShareAmount = totalLockedShare.mul(lenderDepositPercent).div(percentRate);
         uint256 swapAmount = returnShareAmount.mul(exchangeRate).div(EXCHANGE_RATE);
 

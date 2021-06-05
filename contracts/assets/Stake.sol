@@ -10,7 +10,7 @@ interface IStake {
     function stake (uint256 amount) external;
     function unStake (uint256 amount) external;
     function isSatisfied (uint256 startBlockNum, uint256 endBlockNum) external returns (bool);
-    function getCurrentStakeAmountOf (address user) public view returns (uint256);
+    function getCurrentStakeAmountOf (address user) external view returns (uint256);
 }
 
 
@@ -86,7 +86,7 @@ contract Stake is Context, Ownable {
     }
 
     function unStake (uint256 amount) external {
-        require(userStakeChangedBlockNums[sender].length > 0, "stake amount is 0");
+        require(userStakeChangedBlockNums[tx.origin].length > 0, "stake amount is 0");
         address sender = tx.origin;
         uint256 blockNumber = block.number;
         uint256 historyLength = userStakeChangedBlockNums[sender].length;
@@ -105,7 +105,7 @@ contract Stake is Context, Ownable {
 
     function isSatisfied (uint256 startBlockNum, uint256 endBlockNum) external returns (bool) {
         // start >=, end <
-        if (userStakeChangedBlockNums[sender].length == 0) {
+        if (userStakeChangedBlockNums[tx.origin].length == 0) {
             return false;
         }
         // 한번도 stake 한 적이 없는 경우 false return
@@ -126,6 +126,6 @@ contract Stake is Context, Ownable {
         }
         satisfiedPeriod = stakeAmount >= minStakeAmount ? satisfiedPeriod.add(endBlockNum.sub(changedBlockNum)): 0;
 
-        return (satisfiedPeriod >= _minRetentionPeriod) ? true: false;
+        return (satisfiedPeriod >= minRetentionPeriod) ? true: false;
     }
 }
