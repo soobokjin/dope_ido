@@ -5,11 +5,11 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 
-pragma solidity ^0.4.0;
-
 
 interface IStake {
-
+    function stake (uint256 amount) external;
+    function unStake (uint256 amount) external;
+    function isSatisfied (uint256 startBlockNum, uint256 endBlockNum) external returns (bool);
 }
 
 
