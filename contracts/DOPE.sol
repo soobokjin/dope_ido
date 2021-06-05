@@ -4,6 +4,7 @@ import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {IIDOPeriod} from "./utils/Period.sol";
+import {IStake} from "./assets/Stake.sol";
 import "hardhat/console.sol";
 
 // contract 에서는 erc token 의 decimals 에 대해서 고려하지 않는다. (호출자 책임)
@@ -12,7 +13,8 @@ import "hardhat/console.sol";
 // Todo: code refactoring
 // Todo: method define
 // Todo: modifier, require
-
+// Todo: backer, lender cnt 기록
+// Todo: safeERC 사용
 
 struct Share {
     // amount 는 Swap 시점의 USDT 량과 동일
@@ -27,20 +29,6 @@ contract DOPE {
     using SafeMath for uint32;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
-
-    event Staked(
-        address indexed user,
-        uint256 stakeAmount,
-        uint256 totalStakedAmount,
-        uint256 blockNumber
-    );
-
-    event UnStaked(
-        address indexed user,
-        uint256 unStakeAmount,
-        uint256 totalStakedAmount,
-        uint256 blockNumber
-    );
 
     event Funded(
         address indexed user,
@@ -102,14 +90,11 @@ contract DOPE {
     uint32 public totalBacker;
     uint256 public maxAllocationPerUser;
     address public exchangeTokenAddress;
-    // Todo: 정수로 소수 계산하도록 하기
     uint256 exchangeRate;
 
     // stake 관련
     address public treasuryAddress;
-    address public stakeTokenAddress;
-    mapping (address => uint[]) userStakeChangedBlockNums;
-    mapping (address => mapping (uint256 => uint256)) userStakeAmountByBlockNum;
+    IStake public stakeContract;
 
     // loan 관련
     mapping (address => Share) public userShare;
@@ -126,15 +111,17 @@ contract DOPE {
     // 대출금 모집 이후 Fix 된 금액
     mapping (address => uint256) lenderDepositAmount;
 
-    IIDOPeriod public idoPeriod;
+    IIDOPeriod public periodContract;
 
     constructor (
         string memory _saleTokenName,
+
         address _saleTokenAddress,
         uint256 _saleTokenAmount,
+
         address _exchangeTokenAddress,
         address _treasuryAddress,
-        address _stakeTokenAddress,
+        address _stakeAddress,
         address _periodAddress,
         uint256 _maxAllocationPerUser,
         uint256 _exchangeRate,
@@ -144,6 +131,8 @@ contract DOPE {
 
     ) {
         // Todo: Rate 가 10000 을 넘길 수 없음
+        // Check Todo: 설정은 무조건 우리만 변경가능?
+        // Check Todo: 설정 변경이 가능한 기간?
         _admins.push(msg.sender);
         saleTokenName = _saleTokenName;
         saleTokenAddress = _saleTokenAddress;
@@ -151,9 +140,10 @@ contract DOPE {
 
         exchangeTokenAddress = _exchangeTokenAddress;
         treasuryAddress = _treasuryAddress;
-        stakeTokenAddress = _stakeTokenAddress;
+
+        stakeContract = IStake(_stakeAddress);
         lendTokenAddress = _exchangeTokenAddress;
-        idoPeriod = IIDOPeriod(_periodAddress);
+        periodContract = IIDOPeriod(_periodAddress);
 
         maxAllocationPerUser = _maxAllocationPerUser;
         exchangeRate = _exchangeRate;
@@ -230,55 +220,16 @@ contract DOPE {
     // -------------------- public set methods ------------------------
 
     function stake (uint256 amount) public {
-        require(idoPeriod.phaseIn(IIDOPeriod.Phase.Stake), "not in stake period");
-        require(amount > 0, "invalid amount. should be positive value");
+        require(periodContract.phaseIn(IIDOPeriod.Phase.Stake), "not in stake period");
         // Todo: 최소 lockup 개수 체크
         // Todo: amount 만큼 가져올 수 있는 지 체크
-        IERC20 token = IERC20(stakeTokenAddress);
-        require(token.allowance(msg.sender, address(this)) >= amount, "insufficient");
-        address sender = msg.sender;
-        uint256 historyLength = userStakeChangedBlockNums[sender].length;
-        uint256 blockNumber = block.number;
-
-        // transfer
-        token.transferFrom(msg.sender, address(this), amount);
-        // record stake history
-        if (historyLength == 0) {
-            userStakeChangedBlockNums[sender].push(blockNumber);
-            userStakeAmountByBlockNum[sender][blockNumber] = amount;
-        }
-        else {
-            uint256 lastChangedBlockNumber = userStakeChangedBlockNums[sender][historyLength.sub(1)];
-            uint256 lastStakedAmount = userStakeAmountByBlockNum[sender][lastChangedBlockNumber];
-            userStakeChangedBlockNums[sender].push(blockNumber);
-
-            userStakeAmountByBlockNum[sender][blockNumber] = lastStakedAmount.add(amount);
-        }
-
-        emit Staked(
-            msg.sender, amount, userStakeAmountByBlockNum[sender][blockNumber], blockNumber
-        );
+        // Todo: stake 기간 체크
+        stakeContract.stake(amount);
     }
 
     function unStake (uint256 amount) public {
-        address sender = msg.sender;
-        uint256 blockNumber = block.number;
-        require(amount > 0, "invalid amount. should be positive value");
-        require(userStakeChangedBlockNums[sender].length > 0, "stake amount is 0");
-        // Todo: amount 가 stake 량보다 작은 지 체크
-        IERC20 token = IERC20(stakeTokenAddress);
-        uint256 historyLength = userStakeChangedBlockNums[sender].length;
-        uint256 lastChangedBlockNumber = userStakeChangedBlockNums[sender][historyLength.sub(1)];
-        uint256 stakedAmount = userStakeAmountByBlockNum[sender][lastChangedBlockNumber];
-        require(stakedAmount >= amount, "invalid amount. stakedAmount < amount");
-
-        token.transfer(msg.sender, amount);
-        userStakeChangedBlockNums[sender].push(blockNumber);
-        userStakeAmountByBlockNum[sender][blockNumber] = stakedAmount.sub(amount);
-
-        emit UnStaked(
-            msg.sender, amount, userStakeAmountByBlockNum[sender][blockNumber], blockNumber
-        );
+        require(periodContract.phaseIn(IIDOPeriod.Phase.Stake), "not in stake period");
+        stakeContract.unStake(amount);
     }
 
     function fundSaleToken (uint amount) public {
@@ -287,6 +238,9 @@ contract DOPE {
         // Todo: stake 조건 체크
         // Todo: whitelist 여부 체크
         // Todo: backer 기록
+
+        phases = periodContract.getStartAndEndPhaseOf(IIDOPeriod.Phase.Stake);
+        require(stakeContract.isSatisfied(phases[0], phases[1]), "not permission: stake");
 
         IERC20 fromToken = IERC20(exchangeTokenAddress);
         fromToken.transferFrom(msg.sender, treasuryAddress, amount);
