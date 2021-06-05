@@ -10,6 +10,7 @@ interface IStake {
     function stake (uint256 amount) external;
     function unStake (uint256 amount) external;
     function isSatisfied (uint256 startBlockNum, uint256 endBlockNum) external returns (bool);
+    function getCurrentStakeAmountOf (address user) public view returns (uint256);
 }
 
 
@@ -50,6 +51,15 @@ contract Stake is Context, Ownable {
         stakeToken = IERC20(_stakeTokenAddress);
         minStakeAmount = _minStakeAmount;
         minRetentionPeriod = _minRetentionPeriod;
+    }
+
+    function getCurrentStakeAmountOf (address user) public view returns (uint256) {
+        uint256 length = userStakeChangedBlockNums[user].length;
+        if (length == 0) {
+            return 0;
+        }
+        uint256 lastBlockNumber = userStakeChangedBlockNums[user][length - 1];
+        return userStakeAmountByBlockNum[user][lastBlockNumber];
     }
 
     function stake(uint256 amount) external {
