@@ -14,45 +14,45 @@ interface IStake {
 
 
 contract Stake is Context, Ownable {
-        // Todo: Contract operator migration (DOPE 가 가지도록)
-        using SafeERC20 for IERC20;
-        using SafeMath for uint256;
-        using SafeMath for uint32;
-        using SafeMath for uint8;
+    // Todo: Contract operator migration (DOPE 가 가지도록)
+    using SafeERC20 for IERC20;
+    using SafeMath for uint256;
+    using SafeMath for uint32;
+    using SafeMath for uint8;
 
-        event Staked(
-            address indexed user,
-            uint256 stakeAmount,
-            uint256 totalStakedAmount,
-            uint256 blockNumber
-        );
+    event Staked(
+        address indexed user,
+        uint256 stakeAmount,
+        uint256 totalStakedAmount,
+        uint256 blockNumber
+    );
 
-        event UnStaked(
-            address indexed user,
-            uint256 unStakeAmount,
-            uint256 totalStakedAmount,
-            uint256 blockNumber
-        );
+    event UnStaked(
+        address indexed user,
+        uint256 unStakeAmount,
+        uint256 totalStakedAmount,
+        uint256 blockNumber
+    );
 
-        IERC20 public stakeToken;
-        uint32 public minRetentionPeriod;
-        uint256 public minStakeAmount;
+    IERC20 public stakeToken;
+    uint32 public minRetentionPeriod;
+    uint256 public minStakeAmount;
 
-        mapping (address => uint[]) userStakeChangedBlockNums;
-        mapping (address => mapping (uint256 => uint256)) userStakeAmountByBlockNum;
+    mapping(address => uint[]) userStakeChangedBlockNums;
+    mapping(address => mapping(uint256 => uint256)) userStakeAmountByBlockNum;
 
-        constructor (
-            address _stakeTokenAddress,
-            uint256 _minStakeAmount,
-            uint32 _minRetentionPeriod
-        ) {
+    constructor (
+        address _stakeTokenAddress,
+        uint256 _minStakeAmount,
+        uint32 _minRetentionPeriod
+    ) {
 
-            stakeToken = IERC20(_stakeTokenAddress);
-            minStakeAmount = _minStakeAmount;
-            minRetentionPeriod =_minRetentionPeriod;
-        }
+        stakeToken = IERC20(_stakeTokenAddress);
+        minStakeAmount = _minStakeAmount;
+        minRetentionPeriod = _minRetentionPeriod;
+    }
 
-        function stake (uint256 amount) external {
+    function stake(uint256 amount) external {
         require(stakeToken.allowance(tx.origin, address(this)) >= amount, "insufficient allowance.");
         address sender = tx.origin;
         uint256 historyLength = userStakeChangedBlockNums[sender].length;
