@@ -2,6 +2,7 @@ import {HardhatUserConfig} from "hardhat/types";
 import "@nomiclabs/hardhat-waffle";
 import "hardhat-deploy";
 import {readFileSync} from 'fs';
+import { distributeTokens } from "./scripts/tasks/distribute_tokens_for_test";
 
 let getPrivateEnv: Function = function (filePath: string): Map<String, String> {
     let env = readFileSync(filePath, 'utf-8');
@@ -19,6 +20,8 @@ let envs: Map<String, String> = getPrivateEnv('./.env');
 const ROPSTEN_INFURA_KEY = envs.get('ROPSTEN_INFURA_KEY');
 const ROPSTEN_DEPLOYER = envs.get('ROPSTEN_DEPLOYER');
 const ROPSTEN_SALETOKEN_DEPLOYER = envs.get('ROPSTEN_SALETOKEN_DEPLOYER');
+
+distributeTokens();
 
 const config: HardhatUserConfig = {
     solidity: {

@@ -154,6 +154,7 @@ const deployDOPE: DeployFunction = async function (hre: HardhatRuntimeEnvironmen
     let fundContract: Contract = await ethers.getContractAt(Fund, fundDeployment.address, dopeSigner);
 
     console.log(await saleTokenContract.connect(saleTokenSigner).approve(fundDeployment.address, saleTokenAmount));
+    // Todo:  cannot estimate gas; transaction may fail or may require manual gas limit 에러 해결하기
     console.log(await fundContract.connect(dopeSigner).setSaleToken());
     console.log(await fundContract.connect(dopeSigner).setContracts(
         stakeAddress
