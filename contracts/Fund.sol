@@ -85,7 +85,6 @@ contract Fund {
     IERC20 public saleToken;
     IERC20 public exchangeToken;
     IStake public stakeContract;
-    IIDOPeriod public periodContract;
 
     constructor (
         string memory _saleTokenName,
@@ -105,23 +104,19 @@ contract Fund {
         saleTokenAddress = _saleTokenAddress;
         saleTokenAmount = _saleTokenAmount;
         treasuryAddress = _treasuryAddress;
-
         saleToken = IERC20(_saleTokenAddress);
         exchangeToken = IERC20(_exchangeTokenAddress);
-
         maxUserFundingAllocation = _maxUserFundingAllocation;
         exchangeRate = _exchangeRate;
     }
 
     function setContracts(
-        address _stakeAddress,
-        address _periodAddress
+        address _stakeAddress
     ) public {
         stakeContract = IStake(_stakeAddress);
-        periodContract = IIDOPeriod(_periodAddress);
     }
     // -------------------- public getters -----------------------
-    function setSaleToken() public {
+    function setSaleToken () public {
         // Todo: fallback 으로 수정 고려
         require(saleToken.allowance(treasuryAddress, address(this)) == saleTokenAmount, "insufficient");
         saleToken.safeTransferFrom(treasuryAddress, address(this), saleTokenAmount);
@@ -151,9 +146,6 @@ contract Fund {
         // Todo: 한 개인이 최대 구매가능한 수량 한정하기 (maxAllocationPerUser)
         // Todo: stake 조건 체크
         // Todo: whitelist 여부 체크
-        (uint256 start, uint256 end) = periodContract.getStartAndEndPhaseOf(IIDOPeriod.Phase.Stake);
-        require(stakeContract.isSatisfied(start, end), "not permission: stake");
-
         exchangeToken.safeTransferFrom(msg.sender, treasuryAddress, amount);
         userShare[msg.sender] = Share(amount, 0, false);
 

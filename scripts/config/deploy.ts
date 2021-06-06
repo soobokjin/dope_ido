@@ -1,9 +1,9 @@
 export const CONTRACTS: { [network: string]: { [name: string]: any } } = {
   ropsten: {
     tokens: {
-      saleToken: '0x39035122A1C26EE81cA9bc1004DE6dB6efE137f1',
-      stableToken: '0xe000d418D3dD93cc4B01a232b899BfC63A2F325b',
-      dopeToken: '0xcD8686252a1e3313a92F5555A98227952bB4A035'
+      saleToken: '0xC7905463C85C6398B4C146D5AcB02623Cda60E24',
+      stableToken: '0xeaE7E225C6A0733f96C3b0691d61a3B62B8cB850',
+      dopeToken: '0x96d80c5189294e6e12Becb69f16591cd5cfc057C'
     },
   },
   hardhat: {
