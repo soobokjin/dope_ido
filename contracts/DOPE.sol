@@ -157,9 +157,8 @@ contract DOPE {
     }
 
     // lend
-    function getDepositedAmount(address user) public returns (uint256) {
-        uint256 amount = lendContract.getDepositedAmount(user);
-        return amount;
+    function getDepositedAmount(address user) public view returns (uint256) {
+        return lendContract.getDepositedAmount(user);
     }
 
     function getExpectedExchangeAmount(uint256 amount) public view returns (uint256) {
@@ -214,8 +213,7 @@ contract DOPE {
         // Todo: stake 조건 체크
         // Todo: whitelist 여부 체크
         // Todo: backer 기록
-        uint256 start; uint256 end;
-        (start, end) = periodContract.getStartAndEndPhaseOf(IIDOPeriod.Phase.Stake);
+        (uint256 start, uint256 end) = periodContract.getStartAndEndPhaseOf(IIDOPeriod.Phase.Stake);
         require(stakeContract.isSatisfied(start, end), "not permission: stake");
 
         exchangeToken.safeTransferFrom(msg.sender, treasuryAddress, amount);
@@ -238,12 +236,10 @@ contract DOPE {
         // Todo: 현재 예치한 금액 체크
         // Todo: 남은 share 할 금액이 있는 지 체크
         address sender = msg.sender;
-        uint256 lenderDepositPercent;
-        uint256 percentRate;
-        (lenderDepositPercent, percentRate) = lendContract.withdraw();
+        (uint256 lenderDepositPercent, uint256 percentRate) = lendContract.withdraw();
+
         uint256 returnShareAmount = totalLockedShare.mul(lenderDepositPercent).div(percentRate);
         uint256 swapAmount = returnShareAmount.mul(exchangeRate).div(EXCHANGE_RATE);
-
         saleToken.safeTransfer(sender, swapAmount);
         totalRemainShareAfterDistribution = totalRemainShareAfterDistribution.sub(returnShareAmount);
 

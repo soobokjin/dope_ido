@@ -3,6 +3,8 @@ pragma solidity ^0.8.0;
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 
+// Todo: blockTime ->
+
 struct Period {
     uint256 start;
     uint256 end;

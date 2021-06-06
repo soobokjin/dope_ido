@@ -4,6 +4,7 @@ import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
+import "hardhat/console.sol";
 
 
 interface IStake {
@@ -15,12 +16,12 @@ interface IStake {
 
 
 contract Stake is Context, Ownable {
+
     // Todo: Contract operator migration (DOPE 가 가지도록)
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
     using SafeMath for uint32;
     using SafeMath for uint8;
-
     event Staked(
         address indexed user,
         uint256 stakeAmount,
@@ -125,7 +126,6 @@ contract Stake is Context, Ownable {
             prevBlockNum = changedBlockNum;
         }
         satisfiedPeriod = stakeAmount >= minStakeAmount ? satisfiedPeriod.add(endBlockNum.sub(changedBlockNum)): 0;
-
         return (satisfiedPeriod >= minRetentionPeriod) ? true: false;
     }
 }

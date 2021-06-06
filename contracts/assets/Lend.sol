@@ -4,14 +4,14 @@ import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
+import "hardhat/console.sol";
 
 interface ILend {
-    function repayLentTokenFrom (uint amount) external;
-    function getDepositedAmount(address user) external returns (uint256);
+    function getDepositedAmount(address user) external view returns (uint256);
     function deposit (uint256 amount) external;
     function withdraw () external returns (uint256, uint256);
     function sendLentTokenTo (uint256 amount) external;
-
+    function repayLentTokenFrom (uint amount) external;
 }
 
 
@@ -64,7 +64,7 @@ contract Lend {
 
     function deposit (uint256 amount) public {
         address sender = tx.origin;
-        uint256 remainAllocation = maxTotalAllocation.sub(maxTotalAllocation);
+        uint256 remainAllocation = maxTotalAllocation.sub(totalLockedDepositAmount);
         uint256 remainUserAllocation = maxUserAllocation.sub(lenderDepositAmount[sender]);
         require(!isFilled(), "exceed max allocation");
         require(remainUserAllocation > 0, "exceed max user allocation");

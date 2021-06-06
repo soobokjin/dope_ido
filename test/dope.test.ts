@@ -1,7 +1,7 @@
 import {ethers, network} from "hardhat";
 import chai from "chai";
 import {solidity} from "ethereum-waffle";
-import {Contract, ContractFactory} from "ethers";
+import {BigNumber, Contract, ContractFactory} from "ethers";
 import {SignerWithAddress} from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
 import {accumulateBlockByBlockNumber, accumulateBlockByBlockCnt} from "./utils";
 import {deflateRawSync} from "zlib";
@@ -66,6 +66,7 @@ describe("DOPE", () => {
     let investorTokenAmount = 100000;
     let lenderTokenAmount = 100000;
     before("share token to investor and lender", async () => {
+        await dopeTokenContract.connect(tokenOwner).transfer(investor.address, investorTokenAmount)
         await stableTokenContract.connect(tokenOwner).transfer(investor.address, investorTokenAmount)
         await stableTokenContract.connect(tokenOwner).transfer(lender.address, lenderTokenAmount)
     });
@@ -92,7 +93,7 @@ describe("DOPE", () => {
         );
         lendContract = await lend.connect(dopeOwner).deploy(
             stableTokenContract.address,
-            10000000,
+            100000000,
             10000000
         );
     });
@@ -122,20 +123,23 @@ describe("DOPE", () => {
     });
 
     it("stake and unStake", async () => {
-        await dopeTokenContract.connect(tokenOwner).approve(dopeContract.address, 1000);
+        await dopeTokenContract.connect(tokenOwner).approve(stakeContract.address, 1000);
         await dopeContract.connect(tokenOwner).stake(1000);
         await expect(await dopeContract.getCurrentStakeAmount(tokenOwner.address)).to.eq(1000);
         await dopeContract.connect(tokenOwner).unStake(1000);
         await expect(await dopeContract.getCurrentStakeAmount(tokenOwner.address)).to.eq(0);
+        await dopeTokenContract.connect(investor).approve(stakeContract.address, 1000);
+        await dopeContract.connect(investor).stake(1000);
+        await expect(await dopeContract.getCurrentStakeAmount(investor.address)).to.eq(1000);
         await accumulateBlockByBlockNumber(startFundBlockNum);
         await expect(dopeContract.connect(tokenOwner).stake(1000)).to.be.revertedWith("not in stake period");
     });
 
     it("deposit token and lend token from it", async () => {
         // lender Deposit 10000 token
-        await stableTokenContract.connect(lender).approve(dopeContract.address, 10000);
+        await stableTokenContract.connect(lender).approve(lendContract.address, 10000);
         await dopeContract.connect(lender).depositTokenForLend(10000);
-        expect(await dopeContract.getDepositedAmount(lender.address)).to.eq(10000);
+        expect(await dopeContract.getDepositedAmount(lender.address)).to.eq(BigNumber.from(10000));
 
         // investor Fund 10000 token
         await stableTokenContract.connect(investor).approve(dopeContract.address, 10000);
@@ -147,7 +151,7 @@ describe("DOPE", () => {
         // expect(await dopeContract.getShareAndCollateral(investor.address)).to.eq([10000, 1000]);
 
         // investor repay 1000 token (Collateral should be 0 and share should be 9800)
-        await stableTokenContract.connect(investor).approve(dopeContract.address, 1000);
+        await stableTokenContract.connect(investor).approve(lendContract.address, 1000);
         await dopeContract.connect(investor).repay(1000);
         // expect(await dopeContract.getShareAndCollateral(investor.address)).to.eq([10000, 1000]);
 
