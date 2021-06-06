@@ -8,10 +8,7 @@ import "hardhat/console.sol";
 
 
 interface IStake {
-    function stake (uint256 amount) external;
-    function unStake (uint256 amount) external;
     function isSatisfied (uint256 startBlockNum, uint256 endBlockNum) external returns (bool);
-    function getCurrentStakeAmountOf (address user) external view returns (uint256);
 }
 
 
@@ -54,7 +51,7 @@ contract Stake is Context, Ownable {
         minRetentionPeriod = _minRetentionPeriod;
     }
 
-    function getCurrentStakeAmountOf (address user) public view returns (uint256) {
+    function getCurrentStakeAmount (address user) public view returns (uint256) {
         uint256 length = userStakeChangedBlockNums[user].length;
         if (length == 0) {
             return 0;
@@ -63,9 +60,12 @@ contract Stake is Context, Ownable {
         return userStakeAmountByBlockNum[user][lastBlockNumber];
     }
 
-    function stake(uint256 amount) external {
+    function stake (uint256 amount) public {
+        // Todo: 최소 lockup 개수 체크
+        // Todo: amount 만큼 가져올 수 있는 지 체크
+        // Todo: stake 기간 체크
         require(stakeToken.allowance(tx.origin, address(this)) >= amount, "insufficient allowance.");
-        address sender = tx.origin;
+        address sender = msg.sender;
         uint256 historyLength = userStakeChangedBlockNums[sender].length;
         uint256 blockNumber = block.number;
 
@@ -86,9 +86,9 @@ contract Stake is Context, Ownable {
         );
     }
 
-    function unStake (uint256 amount) external {
+    function unStake (uint256 amount) public {
         require(userStakeChangedBlockNums[tx.origin].length > 0, "stake amount is 0");
-        address sender = tx.origin;
+        address sender = msg.sender;
         uint256 blockNumber = block.number;
         uint256 historyLength = userStakeChangedBlockNums[sender].length;
         uint256 lastChangedBlockNumber = userStakeChangedBlockNums[sender][historyLength.sub(1)];
@@ -104,13 +104,13 @@ contract Stake is Context, Ownable {
         );
     }
 
-    function isSatisfied (uint256 startBlockNum, uint256 endBlockNum) external returns (bool) {
+    function isSatisfied (uint256 startBlockNum, uint256 endBlockNum) external view returns (bool) {
         // start >=, end <
         if (userStakeChangedBlockNums[tx.origin].length == 0) {
             return false;
         }
         // 한번도 stake 한 적이 없는 경우 false return
-        address sender = tx.origin;
+        address sender = msg.sender;
         uint256 satisfiedPeriod;
         uint256 stakeAmount;
         uint256 changedBlockNum;
