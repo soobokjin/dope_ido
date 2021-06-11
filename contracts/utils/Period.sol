@@ -72,5 +72,4 @@ contract IDOPeriod is Context, Ownable {
     function phaseIn (Phase phase) external virtual view returns (bool) {
         return (block.number >= _phasePeriod[phase].start && block.number <= _phasePeriod[phase].end);
     }
-
 }

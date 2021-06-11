@@ -3,20 +3,12 @@ pragma solidity ^0.8.0;
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 import {Fund, IFund} from "../Fund.sol";
+import {Operator} from '../access/Operator.sol';
 import "hardhat/console.sol";
 
-interface ILend {
-    function getDepositedAmount(address user) external view returns (uint256);
-    function deposit (uint256 amount) external;
-    function withdraw () external returns (uint256, uint256);
-    function borrow (uint256 amount) external;
-    function repay (uint amount) external;
-}
 
-
-contract Lend {
+contract Lend is Operator {
     using SafeERC20 for IERC20;
     using SafeMath for uint32;
     using SafeMath for uint256;
@@ -177,8 +169,8 @@ contract Lend {
         address sender = msg.sender;
         uint256 unlockCollateralAmount = amount.mul(MAX_LTV_RATE).div(ltvRate);
         uint256 interestAmount = unlockCollateralAmount.mul(interestRate).div(MAX_INTEREST_RATE);
+        lendToken.safeTransferFrom(sender, address(this), amount);
         fund.decreaseCollateral(sender, interestAmount, unlockCollateralAmount);
-        lendToken.transferFrom(sender, address(this), amount);
 
         totalCurrentDepositAmount = totalCurrentDepositAmount.add(amount);
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;

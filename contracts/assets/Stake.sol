@@ -13,8 +13,6 @@ interface IStake {
 
 
 contract Stake is Context, Ownable {
-
-    // Todo: Contract operator migration (DOPE 가 가지도록)
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
     using SafeMath for uint32;
@@ -51,6 +49,14 @@ contract Stake is Context, Ownable {
         minRetentionPeriod = _minRetentionPeriod;
     }
 
+    function setMinStakeAmount (uint256 amount) public onlyOwner {
+        minStakeAmount = amount;
+    }
+
+    function setMinRetentionPeriod (uint32 period) public onlyOwner {
+        minRetentionPeriod = period;
+    }
+
     function getCurrentStakeAmount (address user) public view returns (uint256) {
         uint256 length = userStakeChangedBlockNums[user].length;
         if (length == 0) {
@@ -62,7 +68,6 @@ contract Stake is Context, Ownable {
 
     function stake (uint256 amount) public {
         // Todo: 최소 lockup 개수 체크
-        // Todo: amount 만큼 가져올 수 있는 지 체크
         // Todo: stake 기간 체크
         require(stakeToken.allowance(tx.origin, address(this)) >= amount, "insufficient allowance.");
         address sender = msg.sender;
@@ -104,7 +109,7 @@ contract Stake is Context, Ownable {
         );
     }
 
-    function isSatisfied (uint256 startBlockNum, uint256 endBlockNum) external view returns (bool) {
+    function isSatisfied (uint256 startBlockNum, uint256 endBlockNum) external override view returns (bool) {
         // start >=, end <
         if (userStakeChangedBlockNums[tx.origin].length == 0) {
             return false;
