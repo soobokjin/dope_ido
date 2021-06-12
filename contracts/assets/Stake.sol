@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
@@ -14,7 +15,7 @@ interface IStake {
 }
 
 
-contract Stake is Operator {
+contract Stake is IStake, Operator {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
     using SafeMath for uint32;
@@ -49,6 +50,14 @@ contract Stake is Operator {
 
     Period public stakePeriod;
 
+    modifier onPeriod () {
+        require(
+            stakePeriod.startTime <= block.timestamp && block.timestamp < stakePeriod.periodFinish,
+            "not stake period"
+        );
+        _;
+    }
+
     constructor (
         address _stakeTokenAddress,
         uint256 _minStakeAmount,
@@ -62,20 +71,11 @@ contract Stake is Operator {
 
     function setPeriod (uint256 _startTime, uint256 _period)
         public
-        override
         onlyOwner
     {
         stakePeriod.period = _period;
         stakePeriod.startTime = _startTime;
         stakePeriod.periodFinish = _startTime.add(_period);
-    }
-
-    modifier onPeriod () {
-        require(
-            stakePeriod.startTime <= block.timestamp && block.timestamp < stakePeriod.periodFinish,
-            "not stake period"
-        );
-        _;
     }
 
     function setMinStakeAmount (uint256 amount) public onlyOwner {
@@ -138,7 +138,7 @@ contract Stake is Operator {
         );
     }
 
-    function isSatisfied (address user) external override view returns (bool) {
+    function isSatisfied (address user) external view override returns (bool) {
         if (userStakeChangedBlockTime[user].length == 0) {
             return false;
         }
@@ -151,15 +151,19 @@ contract Stake is Operator {
         for (uint8 i ; i < userStakeChangedBlockTime[user].length ; i++) {
             changedBlockTime = userStakeChangedBlockTime[user][i];
             changedStakeAmount = userStakeAmountByBlockTime[user][changedBlockTime];
-            satisfiedPeriod = _updateSatisfiedPeriod(stakeAmount, changedBlockTime.sub(prevBlockTime));
+            satisfiedPeriod = _calcSatisfiedPeriod(stakeAmount, satisfiedPeriod, changedBlockTime.sub(prevBlockTime));
             stakeAmount = changedStakeAmount;
             prevBlockTime = changedBlockTime;
         }
-        satisfiedPeriod = _updateSatisfiedPeriod(stakeAmount, stakePeriod.periodFinish.sub(changedBlockTime));
+        satisfiedPeriod = _calcSatisfiedPeriod(
+            stakeAmount, satisfiedPeriod, stakePeriod.periodFinish.sub(changedBlockTime)
+        );
         return (satisfiedPeriod >= minRetentionPeriod) ? true: false;
     }
 
-    function _updateSatisfiedPeriod(uint256 stakeAmount, uint256 retentionPeriod) private returns (uint256) {
+    function _calcSatisfiedPeriod(
+        uint256 stakeAmount, uint256 satisfiedPeriod, uint256 retentionPeriod
+    ) private view returns (uint256) {
         return stakeAmount >= minStakeAmount ? satisfiedPeriod.add(retentionPeriod): 0;
     }
 }

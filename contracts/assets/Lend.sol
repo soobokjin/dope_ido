@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
@@ -72,7 +73,6 @@ contract Lend is Operator {
     }
 
     modifier isFilled () {
-        return (maxTotalAllocation == totalLockedDepositAmount);
         require(
             maxTotalAllocation > totalLockedDepositAmount, "exceed max allocation"
         );
@@ -98,7 +98,6 @@ contract Lend is Operator {
 
     function setPeriod (Phase _phase, uint256 _startTime, uint256 _period)
         public
-        override
         onlyOwner
     {
         // Todo: if period has been passed, revert
@@ -139,18 +138,17 @@ contract Lend is Operator {
 
     function deposit (uint256 amount) public onPeriod(Phase.Deposit) isFilled() {
         address sender = msg.sender;
-        actualAmount = _getActualDepositAmount(sender, amount);
+        uint256 actualAmount = _getActualDepositAmount(sender, amount);
 
         lendToken.safeTransferFrom(sender, address(this), actualAmount);
-        lenderDepositAmount[sender] = lenderDepositAmount[sender].add(actualAmount);
-        _updateGlobalDepositInfos(sender, actualAmount);
+        _updateDepositInfo(sender, actualAmount);
 
         emit Deposit(
             sender, actualAmount, lenderDepositAmount[sender]
         );
     }
 
-    function _getActualDepositAmount (address sender, uint256 amount) private returns (uint256) {
+    function _getActualDepositAmount (address sender, uint256 amount) private view returns (uint256) {
         uint256 remainAllocation = maxTotalAllocation.sub(totalLockedDepositAmount);
         uint256 remainUserAllocation = maxUserAllocation.sub(lenderDepositAmount[sender]);
 
@@ -162,7 +160,9 @@ contract Lend is Operator {
         return actualAmount;
     }
 
-    function _updateGlobalDepositInfos(address sender, uint256 actualAmount) private {
+    function _updateDepositInfo(address sender, uint256 actualAmount) private {
+        lenderDepositAmount[sender] = lenderDepositAmount[sender].add(actualAmount);
+
         if (lenderDepositAmount[sender] == 0) {
             totalLender = uint32(totalLender.add(1));
         }
@@ -172,15 +172,14 @@ contract Lend is Operator {
     }
 
     function withdraw () public {
+        // Todo: 현재 예치한 금액 체크
+        // Todo: 남은 share 할 금액이 있는 지 체크
         require(
             phasePeriod[Phase.Borrow].periodFinish > block.timestamp, "can not withdraw before the end of borrow phase"
         );
-        // Todo: 현재 예치한 금액 체크
-        // Todo: 남은 share 할 금액이 있는 지 체크
         address sender = msg.sender;
-        uint256 depositAmount = lenderDepositAmount[sender];
-        uint256 lenderDepositPercent = depositAmount.mul(MAX_PERCENT_RATE).div(totalLockedDepositAmount);
-        uint256 returnDepositAmount = totalCurrentDepositAmount.mul(lenderDepositPercent).div(MAX_PERCENT_RATE);
+        (uint256 lenderDepositPercent, uint256 returnDepositAmount) = _getReturnAmountByDepositPercent(sender);
+
         fund.lenderClaim(sender, lenderDepositPercent, MAX_PERCENT_RATE);
         lendToken.safeTransfer(sender, returnDepositAmount);
 
@@ -189,6 +188,14 @@ contract Lend is Operator {
 
         emit Withdraw(sender, returnDepositAmount);
     }
+
+    function _getReturnAmountByDepositPercent (address sender) private view returns (uint256, uint256) {
+        uint256 lenderDepositPercent = lenderDepositAmount[sender].mul(MAX_PERCENT_RATE).div(totalLockedDepositAmount);
+        uint256 returnDepositAmount = totalCurrentDepositAmount.mul(lenderDepositPercent).div(MAX_PERCENT_RATE);
+
+        return (lenderDepositPercent, returnDepositAmount);
+    }
+
 
     function borrow (uint256 amount) public onPeriod(Phase.Borrow) {
         // Todo: 현재 deposit amount 가 충분한 지 체크

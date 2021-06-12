@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
@@ -28,7 +29,7 @@ struct Share {
     bool isSwapped;
 }
 
-contract Fund is Operator {
+contract Fund is IFund, Operator {
     using SafeMath for uint;
     using SafeMath for uint8;
     using SafeMath for uint32;
@@ -126,7 +127,6 @@ contract Fund is Operator {
 
     function setPeriod (Phase _phase, uint256 _startTime, uint256 _period)
         public
-        override
         onlyOwner
     {
         Period storage period = phasePeriod[_phase];
@@ -162,7 +162,7 @@ contract Fund is Operator {
         return amount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
-    function getRemainShare(address user) public view returns (uint256) {
+    function getRemainShare(address user) public override view returns (uint256) {
         return userShare[user].amount.sub(userShare[user].collateralAmount);
     }
 
