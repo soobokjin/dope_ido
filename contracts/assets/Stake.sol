@@ -10,7 +10,7 @@ import "hardhat/console.sol";
 
 
 interface IStake {
-    function isSatisfied () external returns (bool);
+    function isSatisfied (address user) external returns (bool);
 }
 
 
@@ -19,6 +19,7 @@ contract Stake is Operator {
     using SafeMath for uint256;
     using SafeMath for uint32;
     using SafeMath for uint8;
+
     event Staked(
         address indexed user,
         uint256 stakeAmount,
@@ -77,7 +78,6 @@ contract Stake is Operator {
         _;
     }
 
-
     function setMinStakeAmount (uint256 amount) public onlyOwner {
         minStakeAmount = amount;
     }
@@ -95,7 +95,7 @@ contract Stake is Operator {
         return userStakeAmountByBlockTime[user][lastBlockTime];
     }
 
-    function stake (uint256 amount) onPeriod public {
+    function stake (uint256 amount) public onPeriod {
         require(stakeToken.allowance(_msgSender(), address(this)) >= amount, "insufficient allowance.");
         require(amount >= minStakeAmount, "insufficient amount");
         address sender = _msgSender();
@@ -138,20 +138,19 @@ contract Stake is Operator {
         );
     }
 
-    function isSatisfied () external override view returns (bool) {
-        if (userStakeChangedBlockTime[_msgSender()].length == 0) {
+    function isSatisfied (address user) external override view returns (bool) {
+        if (userStakeChangedBlockTime[user].length == 0) {
             return false;
         }
-        address sender = _msgSender();
         uint256 satisfiedPeriod;
         uint256 stakeAmount;
         uint256 changedBlockTime;
         uint256 changedStakeAmount;
         uint256 prevBlockTime = stakePeriod.startTime;
 
-        for (uint8 i ; i < userStakeChangedBlockTime[sender].length ; i++) {
-            changedBlockTime = userStakeChangedBlockTime[sender][i];
-            changedStakeAmount = userStakeAmountByBlockTime[sender][changedBlockTime];
+        for (uint8 i ; i < userStakeChangedBlockTime[user].length ; i++) {
+            changedBlockTime = userStakeChangedBlockTime[user][i];
+            changedStakeAmount = userStakeAmountByBlockTime[user][changedBlockTime];
             satisfiedPeriod = updateSatisfiedPeriod(stakeAmount, changedBlockTime.sub(prevBlockTime));
             stakeAmount = changedStakeAmount;
             prevBlockTime = changedBlockTime;

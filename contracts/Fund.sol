@@ -58,6 +58,13 @@ contract Fund is Operator {
         uint256 totalCollateralAmount
     );
 
+    enum Phase { Fund, Claim }
+    struct Period {
+        uint256 period;
+        uint256 periodFinish;
+        uint256 startTime;
+    }
+    mapping (Phase => Period) public phasePeriod;
 
     uint32 constant EXCHANGE_RATE = 10 ** 6;
     string public saleTokenName;
@@ -78,6 +85,33 @@ contract Fund is Operator {
     IERC20 public saleToken;
     IERC20 public exchangeToken;
     IStake public stakeContract;
+
+    function setPeriod (Phase _phase, uint256 _startTime, uint256 _period)
+        public
+        override
+        onlyOperator
+    {
+        Period storage period = phasePeriod[_phase];
+        period.period = _period;
+        period.startTime = _startTime;
+        period.periodFinish = _startTime.add(_period);
+    }
+
+    modifier onPeriod (Phase phase) {
+        require(
+            phasePeriod[phase].startTime <= block.timestamp && block.timestamp < phasePeriod[phase].periodFinish,
+            "invalid period"
+        );
+        _;
+    }
+
+    modifier onlyBeforeClaimPhase () {
+        require(
+            block.timestamp < phasePeriod[Phase.Claim].periodFinish,
+            "invalid period"
+        );
+        _;
+    }
 
     constructor (
         string memory _saleTokenName,
@@ -108,7 +142,7 @@ contract Fund is Operator {
     }
     // -------------------- public getters -----------------------
     function setSaleToken () public onlyOwner {
-        // Todo: fallback 으로 수정 고려
+        // Todo: fallback
         require(saleToken.allowance(treasuryAddress, address(this)) == saleTokenAmount, "insufficient");
         saleToken.safeTransferFrom(treasuryAddress, address(this), saleTokenAmount);
     }
@@ -132,11 +166,10 @@ contract Fund is Operator {
         return userShare[user].amount.sub(userShare[user].collateralAmount);
     }
 
-    function fundSaleToken (uint amount) public {
-        // Todo: Check the period
-        // Todo: stake 조건 체크
-        // Todo: whitelist 여부 체크
+    function fundSaleToken (uint amount) public onPeriod (Phase.Fund) {
+        // Todo: whitelist
         require(maxUserFundingAllocation >= amount, "exceed max allocation");
+        require(stakeContract.isSatisfied(msg.sender), "insufficient the stake conditions");
         exchangeToken.safeTransferFrom(msg.sender, treasuryAddress, amount);
         userShare[msg.sender] = Share(amount, 0, false);
 
@@ -146,8 +179,7 @@ contract Fund is Operator {
         emit Funded(msg.sender, amount);
     }
 
-    function claim () public {
-        // Todo: Check the period
+    function claim () public onPeriod(Phase.Claim) {
         // Todo: Check if already claimed
         address sender = msg.sender;
         Share storage _share = userShare[sender];
@@ -164,8 +196,7 @@ contract Fund is Operator {
         address user,
         uint256 lenderDepositPercent,
         uint256 percentRate
-    ) public override onlyOperator {
-        // Todo: Check the period
+    ) public override onlyOperator onPeriod(Phase.Claim) {
         // can not directly call this function (only callable via operator, i.e. Lend contract)
         uint256 returnShareAmount = totalLockedShare.mul(lenderDepositPercent).div(percentRate);
         uint256 swapAmount = returnShareAmount.mul(exchangeRate).div(EXCHANGE_RATE);
@@ -179,7 +210,7 @@ contract Fund is Operator {
     function increaseCollateral (
         address user,
         uint256 collateralAmount
-    ) public override onlyOperator {
+    ) public override onlyOperator onlyBeforeClaimPhase {
         // Todo: Check the user collateralAmount
         // Todo: Check the period
         Share storage _userShare = userShare[user];
@@ -202,7 +233,7 @@ contract Fund is Operator {
         address user,
         uint256 interestAmount,
         uint256 unlockCollateralAmount
-    ) public override onlyOperator {
+    ) public override onlyOperator onlyBeforeClaimPhase {
         // Todo: Check the user collateralAmount
         // Todo: Check the period
         Share storage _userShare = userShare[user];

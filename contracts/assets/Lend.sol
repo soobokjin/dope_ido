@@ -35,13 +35,19 @@ contract Lend is Operator {
         uint256 interestAmount
     );
 
-    // 소수점 둘 째 자리까지 표현
+    enum Phase { Deposit, Borrow }
+    struct Period {
+        uint256 period;
+        uint256 periodFinish;
+        uint256 startTime;
+    }
+    mapping (Phase => Period) public phasePeriod;
+
     uint32 constant MAX_LTV_RATE = 10000;
     uint32 constant MAX_INTEREST_RATE = 10000;
     uint256 constant MAX_PERCENT_RATE = 1e18;
 
     mapping (address => uint256) lenderDepositAmount;
-    mapping (address => uint256) borrowAmount;
 
     IFund public fund;
     IERC20 public lendToken;
@@ -51,7 +57,6 @@ contract Lend is Operator {
 
     uint32 public totalLender;
     uint256 public maxUserAllocation;
-
     uint256 public maxTotalAllocation;
 
     uint256 public totalLockedDepositAmount;
@@ -73,6 +78,25 @@ contract Lend is Operator {
         maxUserAllocation = _maxUserAllocation;
         ltvRate = _ltvRate;
         interestRate = _interestRate;
+    }
+
+    function setPeriod (Phase _phase, uint256 _startTime, uint256 _period)
+        public
+        override
+        onlyOperator
+    {
+        Period storage period = phasePeriod[_phase];
+        period.period = _period;
+        period.startTime = _startTime;
+        period.periodFinish = _startTime.add(_period);
+    }
+
+    modifier onPeriod (Phase phase) {
+        require(
+            phasePeriod[phase].startTime <= block.timestamp && block.timestamp < phasePeriod[phase].periodFinish,
+            "invalid period"
+        );
+        _;
     }
 
 //   function getExpectedRepayInterest(address user, uint256 amount) public view returns (uint256, uint256, uint256) {
@@ -108,7 +132,7 @@ contract Lend is Operator {
         return (maxTotalAllocation == totalLockedDepositAmount);
     }
 
-    function deposit (uint256 amount) public {
+    function deposit (uint256 amount) public onPeriod(Phase.Deposit) {
         address sender = msg.sender;
         uint256 remainAllocation = maxTotalAllocation.sub(totalLockedDepositAmount);
         uint256 remainUserAllocation = maxUserAllocation.sub(lenderDepositAmount[sender]);
@@ -134,7 +158,9 @@ contract Lend is Operator {
     }
 
     function withdraw () public {
-        // Todo: withdraw 가능한 시점인 지 체크 (IDO 종료이후)
+        require(
+            phasePeriod[Phase.Borrow].periodFinish > block.timestamp, "can not withdraw before the end of borrow phase"
+        );
         // Todo: 현재 예치한 금액 체크
         // Todo: 남은 share 할 금액이 있는 지 체크
         address sender = msg.sender;
@@ -150,7 +176,7 @@ contract Lend is Operator {
         emit Withdraw(sender, returnDepositAmount);
     }
 
-    function borrow (uint256 amount) public {
+    function borrow (uint256 amount) public onPeriod(Phase.Borrow) {
         // Todo: 현재 deposit amount 가 충분한 지 체크
         address sender = msg.sender;
         uint256 additionalCollateralAmount = amount.mul(MAX_LTV_RATE).div(ltvRate);
@@ -163,8 +189,7 @@ contract Lend is Operator {
         emit Borrow(sender, amount);
     }
 
-    function repay (uint amount) public {
-        // Todo: 기간 체크
+    function repay (uint amount) public onPeriod(Phase.Borrow) {
         require(lendToken.allowance(msg.sender, address(this)) >= amount, "insufficient token amount");
         address sender = msg.sender;
         uint256 unlockCollateralAmount = amount.mul(MAX_LTV_RATE).div(ltvRate);
