@@ -179,7 +179,7 @@ contract Fund is Operator {
     function increaseCollateral (
         address user,
         uint256 collateralAmount
-    ) public override onlyOpera}tor {
+    ) public override onlyOperator {
         // Todo: Check the user collateralAmount
         // Todo: Check the period
         Share storage _userShare = userShare[user];
