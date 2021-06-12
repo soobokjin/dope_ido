@@ -11,11 +11,7 @@ import "hardhat/console.sol";
 
 // contract 에서는 erc token 의 decimals 에 대해서 고려하지 않는다. (호출자 책임)
 // Todo: initializing DOPE
-// Todo: code refactoring
-// Todo: method define
 // Todo: modifier, require
-// Todo: backer, lender cnt 기록
-// Todo: safeERC 사용
 
 
 interface IFund {
@@ -92,7 +88,7 @@ contract Fund is Operator {
         uint256 _maxUserFundingAllocation,
         uint256 _exchangeRate
             // 소수점 둘 째 자리까지 표현. e.g. 50% -> 5000, 3.12% -> 312
-    ) {
+    ) Operator() {
         // Todo: Rate 가 10000 을 넘길 수 없음
         // Todo: 설정 변경이 가능한 기간?
         saleTokenName = _saleTokenName;
@@ -138,9 +134,9 @@ contract Fund is Operator {
 
     function fundSaleToken (uint amount) public {
         // Todo: Check the period
-        // Todo: 한 개인이 최대 구매가능한 수량 한정하기 (maxAllocationPerUser)
         // Todo: stake 조건 체크
         // Todo: whitelist 여부 체크
+        require(maxUserFundingAllocation >= amount, "exceed max allocation");
         exchangeToken.safeTransferFrom(msg.sender, treasuryAddress, amount);
         userShare[msg.sender] = Share(amount, 0, false);
 
@@ -183,7 +179,7 @@ contract Fund is Operator {
     function increaseCollateral (
         address user,
         uint256 collateralAmount
-    ) public override onlyOperator {
+    ) public override onlyOpera}tor {
         // Todo: Check the user collateralAmount
         // Todo: Check the period
         Share storage _userShare = userShare[user];

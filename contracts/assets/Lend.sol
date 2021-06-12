@@ -65,7 +65,7 @@ contract Lend is Operator {
         uint256 _maxUserAllocation,
         uint256 _ltvRate,
         uint256 _interestRate
-    ) {
+    ) Operator() {
         // Todo: sale amount 를 받아서 maxAllocation 설정하기
         fund = IFund(_fundAddress);
         lendToken = IERC20(_lendTokenAddress);
