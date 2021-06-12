@@ -63,7 +63,7 @@ contract Stake is Operator {
     function setPeriod (uint256 _startTime, uint256 _period)
         public
         override
-        onlyOperator
+        onlyOwner
     {
         stakePeriod.period = _period;
         stakePeriod.startTime = _startTime;
@@ -151,15 +151,15 @@ contract Stake is Operator {
         for (uint8 i ; i < userStakeChangedBlockTime[user].length ; i++) {
             changedBlockTime = userStakeChangedBlockTime[user][i];
             changedStakeAmount = userStakeAmountByBlockTime[user][changedBlockTime];
-            satisfiedPeriod = updateSatisfiedPeriod(stakeAmount, changedBlockTime.sub(prevBlockTime));
+            satisfiedPeriod = _updateSatisfiedPeriod(stakeAmount, changedBlockTime.sub(prevBlockTime));
             stakeAmount = changedStakeAmount;
             prevBlockTime = changedBlockTime;
         }
-        satisfiedPeriod = updateSatisfiedPeriod(stakeAmount, stakePeriod.periodFinish.sub(changedBlockTime));
+        satisfiedPeriod = _updateSatisfiedPeriod(stakeAmount, stakePeriod.periodFinish.sub(changedBlockTime));
         return (satisfiedPeriod >= minRetentionPeriod) ? true: false;
     }
 
-    function updateSatisfiedPeriod (uint256 stakeAmount, uint256 retentionPeriod) private returns (uint256) {
+    function _updateSatisfiedPeriod(uint256 stakeAmount, uint256 retentionPeriod) private returns (uint256) {
         return stakeAmount >= minStakeAmount ? satisfiedPeriod.add(retentionPeriod): 0;
     }
 }

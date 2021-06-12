@@ -86,17 +86,6 @@ contract Fund is Operator {
     IERC20 public exchangeToken;
     IStake public stakeContract;
 
-    function setPeriod (Phase _phase, uint256 _startTime, uint256 _period)
-        public
-        override
-        onlyOperator
-    {
-        Period storage period = phasePeriod[_phase];
-        period.period = _period;
-        period.startTime = _startTime;
-        period.periodFinish = _startTime.add(_period);
-    }
-
     modifier onPeriod (Phase phase) {
         require(
             phasePeriod[phase].startTime <= block.timestamp && block.timestamp < phasePeriod[phase].periodFinish,
@@ -133,6 +122,17 @@ contract Fund is Operator {
         exchangeToken = IERC20(_exchangeTokenAddress);
         maxUserFundingAllocation = _maxUserFundingAllocation;
         exchangeRate = _exchangeRate;
+    }
+
+    function setPeriod (Phase _phase, uint256 _startTime, uint256 _period)
+        public
+        override
+        onlyOwner
+    {
+        Period storage period = phasePeriod[_phase];
+        period.period = _period;
+        period.startTime = _startTime;
+        period.periodFinish = _startTime.add(_period);
     }
 
     function setContracts (

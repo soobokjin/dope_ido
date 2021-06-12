@@ -63,6 +63,22 @@ contract Lend is Operator {
     uint256 public totalCurrentDepositAmount;
     uint256 public totalRemainDepositAmountAfterDistribution;
 
+    modifier onPeriod (Phase phase) {
+        require(
+            phasePeriod[phase].startTime <= block.timestamp && block.timestamp < phasePeriod[phase].periodFinish,
+            "invalid period"
+        );
+        _;
+    }
+
+    modifier isFilled () {
+        return (maxTotalAllocation == totalLockedDepositAmount);
+        require(
+            maxTotalAllocation > totalLockedDepositAmount, "exceed max allocation"
+        );
+        _;
+    }
+
     constructor (
         address _fundAddress,
         address _lendTokenAddress,
@@ -83,20 +99,13 @@ contract Lend is Operator {
     function setPeriod (Phase _phase, uint256 _startTime, uint256 _period)
         public
         override
-        onlyOperator
+        onlyOwner
     {
+        // Todo: if period has been passed, revert
         Period storage period = phasePeriod[_phase];
         period.period = _period;
         period.startTime = _startTime;
         period.periodFinish = _startTime.add(_period);
-    }
-
-    modifier onPeriod (Phase phase) {
-        require(
-            phasePeriod[phase].startTime <= block.timestamp && block.timestamp < phasePeriod[phase].periodFinish,
-            "invalid period"
-        );
-        _;
     }
 
 //   function getExpectedRepayInterest(address user, uint256 amount) public view returns (uint256, uint256, uint256) {
@@ -128,33 +137,38 @@ contract Lend is Operator {
         return (expectedCollateralAmount, interestAmount);
     }
 
-    function isFilled () private view returns (bool) {
-        return (maxTotalAllocation == totalLockedDepositAmount);
-    }
-
-    function deposit (uint256 amount) public onPeriod(Phase.Deposit) {
+    function deposit (uint256 amount) public onPeriod(Phase.Deposit) isFilled() {
         address sender = msg.sender;
-        uint256 remainAllocation = maxTotalAllocation.sub(totalLockedDepositAmount);
-        uint256 remainUserAllocation = maxUserAllocation.sub(lenderDepositAmount[sender]);
-        require(!isFilled(), "exceed max allocation");
-        require(remainUserAllocation > 0, "exceed max user allocation");
-        require(lendToken.allowance(tx.origin, address(this)) >= amount, "insufficient");
-        uint256 actualAmount = remainAllocation >= amount ? amount : remainAllocation;
-        actualAmount = remainUserAllocation >= actualAmount ? actualAmount : remainUserAllocation;
+        actualAmount = _getActualDepositAmount(sender, amount);
 
         lendToken.safeTransferFrom(sender, address(this), actualAmount);
-
-        if (lenderDepositAmount[sender] == 0) {
-            totalLender = uint32(totalLender.add(1));
-        }
         lenderDepositAmount[sender] = lenderDepositAmount[sender].add(actualAmount);
-        totalLockedDepositAmount = totalLockedDepositAmount.add(actualAmount);
-        totalCurrentDepositAmount = totalLockedDepositAmount;
-        totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
+        _updateGlobalDepositInfos(sender, actualAmount);
 
         emit Deposit(
             sender, actualAmount, lenderDepositAmount[sender]
         );
+    }
+
+    function _getActualDepositAmount (address sender, uint256 amount) private returns (uint256) {
+        uint256 remainAllocation = maxTotalAllocation.sub(totalLockedDepositAmount);
+        uint256 remainUserAllocation = maxUserAllocation.sub(lenderDepositAmount[sender]);
+
+        require(remainUserAllocation > 0, "exceed max user allocation");
+        require(lendToken.allowance(sender, address(this)) >= amount, "insufficient");
+        uint256 actualAmount = remainAllocation >= amount ? amount : remainAllocation;
+        actualAmount = remainUserAllocation >= actualAmount ? actualAmount : remainUserAllocation;
+
+        return actualAmount;
+    }
+
+    function _updateGlobalDepositInfos(address sender, uint256 actualAmount) private {
+        if (lenderDepositAmount[sender] == 0) {
+            totalLender = uint32(totalLender.add(1));
+        }
+        totalLockedDepositAmount = totalLockedDepositAmount.add(actualAmount);
+        totalCurrentDepositAmount = totalLockedDepositAmount;
+        totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
     }
 
     function withdraw () public {
@@ -170,8 +184,8 @@ contract Lend is Operator {
         fund.lenderClaim(sender, lenderDepositPercent, MAX_PERCENT_RATE);
         lendToken.safeTransfer(sender, returnDepositAmount);
 
-        totalRemainDepositAmountAfterDistribution = totalRemainDepositAmountAfterDistribution.sub(returnDepositAmount);
         lenderDepositAmount[sender] = 0;
+        totalRemainDepositAmountAfterDistribution = totalRemainDepositAmountAfterDistribution.sub(returnDepositAmount);
 
         emit Withdraw(sender, returnDepositAmount);
     }
