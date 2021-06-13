@@ -3,7 +3,7 @@ import chai from "chai";
 import { solidity } from "ethereum-waffle";
 import { BigNumber, Contract, ContractFactory } from "ethers";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
-import { increaseTime, latestBlocktime } from "../utils";
+import { increaseTime, latestBlocktime } from "../../utils";
 
 chai.use(solidity);
 
@@ -20,7 +20,7 @@ describe("Stake", () => {
     let stakeTokenContract: Contract;
 
     before("Setup accounts", async () => {
-       [stakeOwner] = await ethers.getSigners();
+        [stakeOwner] = await ethers.getSigners();
     });
 
     before("fetch token contract factories", async () => {
@@ -32,16 +32,21 @@ describe("Stake", () => {
         );
     });
 
-    before("fetch stake contract factories", async () => {
-       stake = await ethers.getContractFactory('Stake');
-       stakeContract = await stake.connect(stakeOwner).deploy(
-           stakeTokenContract.address,
-           minStakeAmount,
-           minRetentionPeriod,
-       );
-       await stakeTokenContract.connect(stakeOwner).setPeriod(
-          await latestBlocktime(),
-           3600
-       )
+    beforeEach("fetch stake contract factories", async () => {
+        stake = await ethers.getContractFactory('Stake');
+        stakeContract = await stake.connect(stakeOwner).deploy(
+            stakeTokenContract.address,
+            minStakeAmount,
+            minRetentionPeriod,
+        );
+        await stakeContract.connect(stakeOwner).setPeriod(
+            await latestBlocktime() + 3600,
+            3600
+        );
+    });
+
+    it("stake and unstake", async () => {
+        await stakeTokenContract.connect(stakeOwner).approve(stakeContract.address, 100000);
+        await stakeContract.connect(stakeOwner).stake(100000);
     });
 });

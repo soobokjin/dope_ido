@@ -3,7 +3,7 @@ import chai from "chai";
 import { solidity } from "ethereum-waffle";
 import {BigNumber, Contract, ContractFactory} from "ethers";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
-import { accumulateBlockByBlockNumber, accumulateBlockByBlockCnt } from "../utils";
+import { accumulateBlockByBlockNumber, accumulateBlockByBlockCnt } from "../../utils";
 
 chai.use(solidity);
 const { expect } = chai;
