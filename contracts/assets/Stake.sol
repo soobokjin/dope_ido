@@ -99,24 +99,29 @@ contract Stake is IStake, Operator {
         require(stakeToken.allowance(_msgSender(), address(this)) >= amount, "insufficient allowance.");
         require(amount >= minStakeAmount, "insufficient amount");
         address sender = _msgSender();
+
+        stakeToken.safeTransferFrom(sender, address(this), amount);
+        _updateStakeInfo(sender, amount);
+
+        emit Staked(
+            msg.sender, amount, userStakeAmountByBlockTime[sender][block.timestamp], block.timestamp
+        );
+    }
+
+    function _updateStakeInfo (address sender, uint256 amount) private {
         uint256 historyLength = userStakeChangedBlockTime[sender].length;
-        uint256 blockTime = block.timestamp;
 
         stakeToken.safeTransferFrom(sender, address(this), amount);
         if (historyLength == 0) {
-            userStakeChangedBlockTime[sender].push(blockTime);
-            userStakeAmountByBlockTime[sender][blockTime] = amount;
+            userStakeChangedBlockTime[sender].push(block.timestamp);
+            userStakeAmountByBlockTime[sender][block.timestamp] = amount;
         }
         else {
             uint256 lastChangedBlockTime = userStakeChangedBlockTime[sender][historyLength.sub(1)];
             uint256 lastStakedAmount = userStakeAmountByBlockTime[sender][lastChangedBlockTime];
-            userStakeChangedBlockTime[sender].push(blockTime);
-            userStakeAmountByBlockTime[sender][blockTime] = lastStakedAmount.add(amount);
+            userStakeChangedBlockTime[sender].push(block.timestamp);
+            userStakeAmountByBlockTime[sender][block.timestamp] = lastStakedAmount.add(amount);
         }
-
-        emit Staked(
-            msg.sender, amount, userStakeAmountByBlockTime[sender][blockTime], blockTime
-        );
     }
 
     function unStake (uint256 amount) public {
@@ -129,9 +134,9 @@ contract Stake is IStake, Operator {
         uint256 stakedAmount = userStakeAmountByBlockTime[sender][lastChangedBlockTime];
         require(stakedAmount >= amount, "invalid amount. stakedAmount < amount");
 
-        stakeToken.safeTransfer(sender, amount);
-        userStakeChangedBlockTime[sender].push(blockTime);
         userStakeAmountByBlockTime[sender][blockTime] = stakedAmount.sub(amount);
+        userStakeChangedBlockTime[sender].push(blockTime);
+        stakeToken.safeTransfer(sender, amount);
 
         emit UnStaked(
             msg.sender, amount, userStakeAmountByBlockTime[sender][blockTime], blockTime

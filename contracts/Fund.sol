@@ -162,7 +162,7 @@ contract Fund is IFund, Operator {
         return amount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
-    function getRemainShare(address user) public override view returns (uint256) {
+    function getRemainShare (address user) public override view returns (uint256) {
         return userShare[user].amount.sub(userShare[user].collateralAmount);
     }
 

@@ -172,18 +172,17 @@ contract Lend is Operator {
     }
 
     function withdraw () public {
-        // Todo: 현재 예치한 금액 체크
         // Todo: 남은 share 할 금액이 있는 지 체크
         require(
-            phasePeriod[Phase.Borrow].periodFinish > block.timestamp, "can not withdraw before the end of borrow phase"
+            phasePeriod[Phase.Borrow].periodFinish > block.timestamp, "can not withdraw on borrow phase"
         );
+        require(lenderDepositAmount[msg.sender] > 0, "no token to withdraw");
         address sender = msg.sender;
         (uint256 lenderDepositPercent, uint256 returnDepositAmount) = _getReturnAmountByDepositPercent(sender);
-
+        lenderDepositAmount[sender] = 0;
         fund.lenderClaim(sender, lenderDepositPercent, MAX_PERCENT_RATE);
         lendToken.safeTransfer(sender, returnDepositAmount);
 
-        lenderDepositAmount[sender] = 0;
         totalRemainDepositAmountAfterDistribution = totalRemainDepositAmountAfterDistribution.sub(returnDepositAmount);
 
         emit Withdraw(sender, returnDepositAmount);
@@ -215,8 +214,8 @@ contract Lend is Operator {
         address sender = msg.sender;
         uint256 unlockCollateralAmount = amount.mul(MAX_LTV_RATE).div(ltvRate);
         uint256 interestAmount = unlockCollateralAmount.mul(interestRate).div(MAX_INTEREST_RATE);
-        lendToken.safeTransferFrom(sender, address(this), amount);
         fund.decreaseCollateral(sender, interestAmount, unlockCollateralAmount);
+        lendToken.safeTransferFrom(sender, address(this), amount);
 
         totalCurrentDepositAmount = totalCurrentDepositAmount.add(amount);
         totalRemainDepositAmountAfterDistribution = totalCurrentDepositAmount;
