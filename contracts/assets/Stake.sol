@@ -42,8 +42,9 @@ contract Stake is IStake, Operator {
     }
 
     IERC20 public stakeToken;
-    uint32 public minRetentionPeriod;
-    uint256 public minStakeAmount;
+    uint32 public requiredRetentionPeriod;
+    uint256 public requiredStakeAmount;
+    uint256 public minLockupAmount;
 
     mapping(address => uint[]) userStakeChangedBlockTime;
     mapping(address => mapping(uint256 => uint256)) userStakeAmountByBlockTime;
@@ -51,7 +52,6 @@ contract Stake is IStake, Operator {
     Period public stakePeriod;
 
     modifier onPeriod () {
-        console.log(stakePeriod.startTime, block.timestamp, stakePeriod.periodFinish);
         require(
             stakePeriod.startTime <= block.timestamp && block.timestamp < stakePeriod.periodFinish,
             "not stake period"
@@ -61,13 +61,15 @@ contract Stake is IStake, Operator {
 
     constructor (
         address _stakeTokenAddress,
-        uint256 _minStakeAmount,
-        uint32 _minRetentionPeriod
+        uint256 _minLockupAmount,
+        uint256 _requiredStakeAmount,
+        uint32 _requiredRetentionPeriod
     ) Operator() {
         stakeToken = IERC20(_stakeTokenAddress);
-        minStakeAmount = _minStakeAmount;
+        minLockupAmount = _minLockupAmount;
+        requiredStakeAmount = _requiredStakeAmount;
         // Timestamp
-        minRetentionPeriod = _minRetentionPeriod;
+        requiredRetentionPeriod = _requiredRetentionPeriod;
     }
 
     function setPeriod (uint256 _startTime, uint256 _period)
@@ -79,12 +81,12 @@ contract Stake is IStake, Operator {
         stakePeriod.periodFinish = _startTime.add(_period);
     }
 
-    function setMinStakeAmount (uint256 amount) public onlyOwner {
-        minStakeAmount = amount;
+    function setRequiredStakeAmount (uint256 amount) public onlyOwner {
+        requiredStakeAmount = amount;
     }
 
-    function setMinRetentionPeriod (uint32 period) public onlyOwner {
-        minRetentionPeriod = period;
+    function setRequiredRetentionPeriod (uint32 period) public onlyOwner {
+        requiredRetentionPeriod = period;
     }
 
     function getCurrentStakeAmount (address user) public view returns (uint256) {
@@ -98,7 +100,7 @@ contract Stake is IStake, Operator {
 
     function stake (uint256 amount) public onPeriod {
         require(stakeToken.allowance(_msgSender(), address(this)) >= amount, "insufficient allowance");
-        require(amount >= minStakeAmount, "insufficient amount");
+        require(amount >= minLockupAmount, "insufficient amount");
         address sender = _msgSender();
         stakeToken.safeTransferFrom(sender, address(this), amount);
         _updateStakeInfo(sender, amount);
@@ -151,6 +153,9 @@ contract Stake is IStake, Operator {
         uint256 changedBlockTime;
         uint256 changedStakeAmount;
         uint256 prevBlockTime = stakePeriod.startTime;
+        uint256 endBlockTime = (
+        stakePeriod.periodFinish > block.timestamp
+        ) ? block.timestamp : stakePeriod.periodFinish;
 
         for (uint8 i ; i < userStakeChangedBlockTime[user].length ; i++) {
             changedBlockTime = userStakeChangedBlockTime[user][i];
@@ -160,14 +165,14 @@ contract Stake is IStake, Operator {
             prevBlockTime = changedBlockTime;
         }
         satisfiedPeriod = _calcSatisfiedPeriod(
-            stakeAmount, satisfiedPeriod, stakePeriod.periodFinish.sub(changedBlockTime)
+            stakeAmount, satisfiedPeriod, endBlockTime.sub(changedBlockTime)
         );
-        return (satisfiedPeriod >= minRetentionPeriod) ? true: false;
+        return (satisfiedPeriod >= requiredRetentionPeriod) ? true: false;
     }
 
     function _calcSatisfiedPeriod(
         uint256 stakeAmount, uint256 satisfiedPeriod, uint256 retentionPeriod
     ) private view returns (uint256) {
-        return stakeAmount >= minStakeAmount ? satisfiedPeriod.add(retentionPeriod): 0;
+        return stakeAmount >= requiredStakeAmount ? satisfiedPeriod.add(retentionPeriod): 0;
     }
 }
