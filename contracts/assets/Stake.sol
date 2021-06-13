@@ -51,6 +51,7 @@ contract Stake is IStake, Operator {
     Period public stakePeriod;
 
     modifier onPeriod () {
+        console.log(stakePeriod.startTime, block.timestamp, stakePeriod.periodFinish);
         require(
             stakePeriod.startTime <= block.timestamp && block.timestamp < stakePeriod.periodFinish,
             "not stake period"
@@ -96,10 +97,9 @@ contract Stake is IStake, Operator {
     }
 
     function stake (uint256 amount) public onPeriod {
-        require(stakeToken.allowance(_msgSender(), address(this)) >= amount, "insufficient allowance.");
+        require(stakeToken.allowance(_msgSender(), address(this)) >= amount, "insufficient allowance");
         require(amount >= minStakeAmount, "insufficient amount");
         address sender = _msgSender();
-
         stakeToken.safeTransferFrom(sender, address(this), amount);
         _updateStakeInfo(sender, amount);
 
@@ -111,7 +111,6 @@ contract Stake is IStake, Operator {
     function _updateStakeInfo (address sender, uint256 amount) private {
         uint256 historyLength = userStakeChangedBlockTime[sender].length;
 
-        stakeToken.safeTransferFrom(sender, address(this), amount);
         if (historyLength == 0) {
             userStakeChangedBlockTime[sender].push(block.timestamp);
             userStakeAmountByBlockTime[sender][block.timestamp] = amount;
