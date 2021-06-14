@@ -158,7 +158,7 @@ contract Fund is IFund, Operator {
         return (shareAmount.sub(collateralAmount), collateralAmount);
     }
 
-    function getExpectedExchangeAmount(uint256 amount) public view returns (uint256) {
+    function getExpectedExchangeAmount (uint256 amount) public view returns (uint256) {
         return amount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 

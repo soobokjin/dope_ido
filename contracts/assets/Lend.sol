@@ -172,7 +172,6 @@ contract Lend is Operator {
     }
 
     function withdraw () public {
-        // Todo: 남은 share 할 금액이 있는 지 체크
         require(
             phasePeriod[Phase.Borrow].periodFinish > block.timestamp, "can not withdraw on borrow phase"
         );
