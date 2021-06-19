@@ -13,6 +13,7 @@ import "hardhat/console.sol";
 
 
 interface IFund {
+    function transferOwnership(address newOwner) external;
     function fund (uint256 amount) external;
 }
 
