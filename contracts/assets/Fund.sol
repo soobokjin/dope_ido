@@ -10,8 +10,6 @@ import {Operator} from '../access/Operator.sol';
 import "hardhat/console.sol";
 
 // contract 에서는 erc token 의 decimals 에 대해서 고려하지 않는다. (호출자 책임)
-// Todo: initializing DOPE
-// Todo: modifier, require
 
 
 interface IFund {
@@ -45,27 +43,27 @@ contract Fund is IFund, Operator {
         uint256 amount;
         bool isClaimed;
     }
+    uint32 constant EXCHANGE_RATE = 10 ** 6;
 
     Period public fundPeriod;
     uint256 public releaseTime;
 
-    // expressed to six decimal places. e.g. exchange_rate 1 means 0.000001
-    uint32 constant EXCHANGE_RATE = 10 ** 6;
-
-    address public saleTokenAddress;
-    address public treasuryAddress;
-    uint256 exchangeRate;
-    uint256 public saleTokenAmount;
-    uint256 public totalFundedAmount;
-
-    uint32 public totalBacker;
-    uint256 public minUserFundingAmount;
-    uint256 public maxUserFundingAmount;
-    mapping (address => FundInfo) public userFundInfo;
-
     IERC20 public saleToken;
     IERC20 public exchangeToken;
     IStake public stakeContract;
+
+    // target amount to get exchange token
+    uint256 public targetAmount;
+    uint256 exchangeRate;
+    uint256 public userMinFundingAmount;
+    uint256 public userMaxFundingAmount;
+    address public treasuryAddress;
+
+    // expressed to six decimal places. e.g. exchange_rate 1 means 0.000001
+    mapping (address => FundInfo) public userFundInfo;
+
+    uint32 public totalBacker;
+    uint256 public totalFundedAmount;
 
     modifier onPeriod () {
         require(
@@ -76,48 +74,50 @@ contract Fund is IFund, Operator {
     }
 
     constructor (
+        address _treasuryAddress,
         address exchangeTokenAddress,
-        address treasuryAddress,
         address stakeAddress
     ) Operator() {
-        // Todo: 설정 변경이 가능한 기간?
-        treasuryAddress = treasuryAddress;
+        treasuryAddress = _treasuryAddress;
         exchangeToken = IERC20(exchangeTokenAddress);
         stakeContract = IStake(stakeAddress);
     }
 
-    function setPeriod (uint256 startTime, uint256 period)
+    function setSaleToken (
+        address _saleTokenAddress,
+        address _senderAddress,
+        uint256 _targetAmount,
+        uint256 _exchangeRate,
+        uint256 _userMinFundingAmount,
+        uint256 _userMaxFundingAmount
+    ) public onlyOwner {
+        saleToken = IERC20(_saleTokenAddress);
+        targetAmount = _targetAmount;
+        exchangeRate = _exchangeRate;
+        userMinFundingAmount = _userMinFundingAmount;
+        userMaxFundingAmount = _userMaxFundingAmount;
+
+        uint256 totalSaleTokenAmount = _targetAmount.mul(_exchangeRate).div(EXCHANGE_RATE);
+        saleToken.safeTransferFrom(_senderAddress, address(this), totalSaleTokenAmount);
+    }
+
+    function setPeriod (uint256 _fundStartTime, uint256 _fundingPeriod, uint256 _releaseTime)
         public
         onlyOwner
     {
-        fundPeriod.period = period;
-        fundPeriod.startTime = startTime;
-        fundPeriod.periodFinish = startTime.add(period);
-    }
-
-    function setReleaseTime (uint256 _releaseTime) public onlyOwner {
+        fundPeriod.period = _fundingPeriod;
+        fundPeriod.startTime = _fundStartTime;
+        fundPeriod.periodFinish = _fundStartTime.add(_fundingPeriod);
         releaseTime = _releaseTime;
     }
 
-    function setSaleToken (
-        address _saleTokenAddress,
-        uint256 _saleTokenAmount,
-        uint256 _maxUserFundingAllocation,
-        uint256 _exchangeRate
-    ) public onlyOwner {
-        // Todo: fallback
-        saleToken = IERC20(_saleTokenAddress);
-        saleToken.safeTransferFrom(treasuryAddress, address(this), saleTokenAmount);
-        saleTokenAddress = _saleTokenAddress;
-        saleTokenAmount = _saleTokenAmount;
-
-        maxUserFundingAmount = _maxUserFundingAllocation;
-        exchangeRate = _exchangeRate;
+    // -------------------- public getters -----------------------
+    function getTotalSaleTokenAmount() public view returns (uint256) {
+        return targetAmount.mul(_exchangeRate).div(EXCHANGE_RATE);
     }
 
-    // -------------------- public getters -----------------------
-    function getTargetFundingAmount() public view returns (uint256) {
-        return saleTokenAmount.mul(EXCHANGE_RATE).div(exchangeRate);
+    function getTargetAmount() public view returns (uint256) {
+        return targetAmount;
     }
 
     function getExpectedExchangeAmount (uint256 amount) public view returns (uint256) {
@@ -128,14 +128,20 @@ contract Fund is IFund, Operator {
         return userFundInfo[user].amount;
     }
 
+    function getClaimedAmount (address user) public view returns (uint256) {
+        if (userFundInfo[user].isClaimed == false) {
+            return 0;
+        }
+        return userFundInfo[user].mul(exchangeRate).div(EXCHANGE_RATE);
+    }
+
     function fund (uint256 amount) public onPeriod {
         // Todo: Whitelist
-        // Todo: Check if lock up period is need
         require(userFundInfo[msg.sender].amount == 0, "already funded");
-        require(amount >= minUserFundingAmount, "under min allocation");
-        require(amount <= maxUserFundingAmount, "exceed max allocation");
+        require(amount >= userMaxFundingAmount, "under min allocation");
+        require(amount <= userMinFundingAmount, "exceed max allocation");
         require(stakeContract.isSatisfied(msg.sender), "dissatisfy stake conditions");
-        require(totalFundedAmount <= saleTokenAmount, "fund is finished");
+        require(totalFundedAmount <= targetAmount, "funding has been finished");
         uint256 availableAmount = _getAvailableAmount(amount);
 
         // if lock up period is exist, do not swap.
@@ -146,7 +152,7 @@ contract Fund is IFund, Operator {
         }
     }
     function _getAvailableAmount (uint256 amount) private returns (uint256) {
-        uint256 remainAmount = saleTokenAmount.sub(totalFundedAmount);
+        uint256 remainAmount = targetAmount.sub(totalFundedAmount);
         return remainAmount >= amount ? amount : remainAmount;
 }
     function _fund (uint256 amount) private {
