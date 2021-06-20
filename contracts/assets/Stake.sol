@@ -12,6 +12,13 @@ import "hardhat/console.sol";
 
 
 interface IStake {
+    function initialize (bytes memory args) external;
+    function initPayload (
+        address _stakeTokenAddress,
+        uint256 _minLockupAmount,
+        uint256 _requiredStakeAmount,
+        uint32 _requiredRetentionPeriod
+    ) external view returns (bytes memory);
     function isSatisfied (address user) external returns (bool);
 }
 
@@ -45,11 +52,10 @@ contract Stake is IStake, Operator, Initializable {
     IERC20 public stakeToken;
     uint32 public requiredRetentionPeriod;
     uint256 public requiredStakeAmount;
-    uint256 public minLockupAmount;
-
     mapping(address => uint[]) userStakeChangedBlockTime;
     mapping(address => mapping(uint256 => uint256)) userStakeAmountByBlockTime;
 
+    uint256 public minLockupAmount;
     Period public stakePeriod;
 
     modifier onPeriod () {
@@ -60,7 +66,7 @@ contract Stake is IStake, Operator, Initializable {
         _;
     }
 
-    function initialize (bytes memory args) public initializer {
+    function initialize (bytes memory args) public override initializer {
         (
             address _stakeTokenAddress,
             uint256 _minLockupAmount,
@@ -80,7 +86,7 @@ contract Stake is IStake, Operator, Initializable {
         uint256 _minLockupAmount,
         uint256 _requiredStakeAmount,
         uint32 _requiredRetentionPeriod
-    ) public view returns (bytes memory) {
+    ) public view override returns (bytes memory) {
         return abi.encode(
             _stakeTokenAddress,
             _minLockupAmount,
