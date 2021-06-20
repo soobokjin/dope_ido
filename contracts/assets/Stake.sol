@@ -5,18 +5,18 @@ import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
+import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.sol';
 import {Operator} from '../access/Operator.sol';
 
 import "hardhat/console.sol";
 
 
 interface IStake {
-    function transferOwnership(address newOwner) external;
     function isSatisfied (address user) external returns (bool);
 }
 
 
-contract Stake is IStake, Operator {
+contract Stake is IStake, Operator, Initializable {
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
     using SafeMath for uint32;
@@ -60,17 +60,33 @@ contract Stake is IStake, Operator {
         _;
     }
 
-    constructor (
-        address _stakeTokenAddress,
-        uint256 _minLockupAmount,
-        uint256 _requiredStakeAmount,
-        uint32 _requiredRetentionPeriod
-    ) Operator() {
+    function initialize (bytes memory args) public initializer {
+        (
+            address _stakeTokenAddress,
+            uint256 _minLockupAmount,
+            uint256 _requiredStakeAmount,
+            uint32 _requiredRetentionPeriod
+        ) = abi.decode(args, (address, uint256, uint256, uint32));
+
         stakeToken = IERC20(_stakeTokenAddress);
         minLockupAmount = _minLockupAmount;
         requiredStakeAmount = _requiredStakeAmount;
         // Timestamp
         requiredRetentionPeriod = _requiredRetentionPeriod;
+    }
+
+    function initPayload (
+        address _stakeTokenAddress,
+        uint256 _minLockupAmount,
+        uint256 _requiredStakeAmount,
+        uint32 _requiredRetentionPeriod
+    ) public view returns (bytes memory) {
+        return abi.encode(
+            _stakeTokenAddress,
+            _minLockupAmount,
+            _requiredStakeAmount,
+            _requiredRetentionPeriod
+        );
     }
 
     function setPeriod (uint256 _startTime, uint256 _period)

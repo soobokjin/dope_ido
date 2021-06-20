@@ -41,8 +41,12 @@ describe("Stake", () => {
 
     beforeEach("fetch stake contract factories", async () => {
         let defaultTimeBefore: number = DAY
+        let args;
         stake = await ethers.getContractFactory('Stake');
         stakeContract = await stake.connect(stakeOwner).deploy(
+
+        );
+        args = await stakeContract.initPayload(
             stakeTokenContract.address,
             minLockUpAmount,
             requiredStakeAmount,
@@ -50,6 +54,7 @@ describe("Stake", () => {
         );
 
         // set on stake period
+        await stakeContract.connect(stakeOwner).initialize(args);
         await stakeContract.connect(stakeOwner).setPeriod(
             await latestBlocktime() - defaultTimeBefore,
             defaultTimeBefore + DAY

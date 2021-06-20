@@ -2,8 +2,8 @@
 pragma solidity ^0.8.0;
 
 import {Fund} from  './assets/Fund.sol';
-
-import {Stake} from './assets/Stake.sol';
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {Stake, IStake} from './assets/Stake.sol';
 
 contract DopeFactory {
     event OwnerChanged(address indexed oldOwner, address indexed newOwner);
@@ -13,14 +13,12 @@ contract DopeFactory {
         address indexed fund
     );
 
-
     struct Dope {
         address stake;
         address fund;
     }
 
     address public owner;
-
     Dope[] public createdDopeList;
 
     constructor() {
@@ -28,34 +26,44 @@ contract DopeFactory {
         emit OwnerChanged(address(0), msg.sender);
     }
 
-    function changeOwner (address _owner) public {
-        require(msg.sender == owner, "only owner can change");
-        emit OwnerChanged(owner, _owner);
-        owner = _owner;
-    }
+//    function changeOwner (address _owner) public {
+//        require(msg.sender == owner, "only owner can change");
+//        emit OwnerChanged(owner, _owner);
+//        owner = _owner;
+//    }
 
     function createDope (
+        // stake
         address _stakeTokenAddress,
         uint256 _minLockupAmount,
         uint256 _requiredStakeAmount,
         uint32 _requiredRetentionPeriod,
-        address _treasuryAddress,
-        address _exchangeTokenAddress
+        // fund
+        address _saleTokenAddress,
+        address _exchangeTokenAddress,
+        address _treasuryAddress
     ) public returns (address stakeAddress, address fundAddress) {
+        // initialize with metadata
+        // set period
+
+        // give ownership to others
+
         stakeAddress = _deployStake(
             _stakeTokenAddress,
             _minLockupAmount,
             _requiredStakeAmount,
             _requiredRetentionPeriod
         );
+
         fundAddress = _deployFund(
-            _treasuryAddress,
+            _saleTokenAddress,
             _exchangeTokenAddress,
-            stakeAddress
+            stakeAddress,
+            _treasuryAddress
         );
 
-        createdDopeList.push(Dope({stake: stakeAddress, fund: fundAddress}));
-        emit ContractCreated(stakeAddress, fundAddress);
+         createdDopeList.push(Dope({stake: stakeAddress, fund: fundAddress}));
+         emit ContractCreated(stakeAddress, fundAddress);
     }
 
     function _deployStake (
@@ -64,27 +72,28 @@ contract DopeFactory {
         uint256 _requiredStakeAmount,
         uint32 _requiredRetentionPeriod
     ) private returns (address) {
-        IStake stake = new Stake(
+        Stake stake = new Stake();
+        bytes memory payload = stake.initPayload(
             _stakeTokenAddress,
             _minLockupAmount,
             _requiredStakeAmount,
             _requiredRetentionPeriod
         );
+        stake.initialize(payload);
         stake.transferOwnership(msg.sender);
 
         return address(stake);
     }
 
     function _deployFund (
-        address _treasuryAddress,
+        address _saleTokenAddress,
         address exchangeTokenAddress,
-        address stakeAddress
+        address stakeAddress,
+        address _treasuryAddress
     ) private returns (address) {
-        IFund fund = new Fund(
-            _treasuryAddress,
-            exchangeTokenAddress,
-            stakeAddress
-        );
+        Fund fund = new Fund{
+        salt : keccak256(abi.encode(_saleTokenAddress, exchangeTokenAddress, stakeAddress, _treasuryAddress))
+        }();
         fund.transferOwnership(msg.sender);
 
         return address(fund);

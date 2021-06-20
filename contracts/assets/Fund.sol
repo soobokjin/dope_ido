@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.sol';
 import {IStake} from "./Stake.sol";
 import {Operator} from '../access/Operator.sol';
 
@@ -13,12 +14,11 @@ import "hardhat/console.sol";
 
 
 interface IFund {
-    function transferOwnership(address newOwner) external;
     function fund (uint256 amount) external;
 }
 
 
-contract Fund is IFund, Operator {
+contract Fund is IFund, Operator, Initializable {
     using SafeMath for uint;
     using SafeMath for uint32;
     using SafeMath for uint256;
@@ -74,25 +74,43 @@ contract Fund is IFund, Operator {
         _;
     }
 
-    constructor (
-        address _treasuryAddress,
-        address exchangeTokenAddress,
-        address stakeAddress
-    ) Operator() {
-        treasuryAddress = _treasuryAddress;
+    function initialize (
+        bytes memory args
+    ) public initializer {
+        (
+            address _saleTokenAddress,
+            address exchangeTokenAddress,
+            address stakeAddress,
+            address _treasuryAddress
+        ) = abi.decode(args, (address, address, address, address));
+
+        saleToken = IERC20(_saleTokenAddress);
         exchangeToken = IERC20(exchangeTokenAddress);
         stakeContract = IStake(stakeAddress);
+        treasuryAddress = _treasuryAddress;
+    }
+
+    function initPayload (
+        address _saleTokenAddress,
+        address exchangeTokenAddress,
+        address stakeAddress,
+        address _treasuryAddress
+    ) public view returns (bytes memory) {
+        return abi.encode(
+            _saleTokenAddress,
+            exchangeTokenAddress,
+            stakeAddress,
+            _treasuryAddress
+        );
     }
 
     function setSaleToken (
-        address _saleTokenAddress,
         address _senderAddress,
         uint256 _targetAmount,
         uint256 _exchangeRate,
         uint256 _userMinFundingAmount,
         uint256 _userMaxFundingAmount
     ) public onlyOwner {
-        saleToken = IERC20(_saleTokenAddress);
         targetAmount = _targetAmount;
         exchangeRate = _exchangeRate;
         userMinFundingAmount = _userMinFundingAmount;
@@ -114,7 +132,7 @@ contract Fund is IFund, Operator {
 
     // -------------------- public getters -----------------------
     function getTotalSaleTokenAmount() public view returns (uint256) {
-        return targetAmount.mul(_exchangeRate).div(EXCHANGE_RATE);
+        return targetAmount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
     function getTargetAmount() public view returns (uint256) {
@@ -133,10 +151,11 @@ contract Fund is IFund, Operator {
         if (userFundInfo[user].isClaimed == false) {
             return 0;
         }
-        return userFundInfo[user].mul(exchangeRate).div(EXCHANGE_RATE);
+        uint256 amount = userFundInfo[user].amount;
+        return amount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
-    function fund (uint256 amount) public onPeriod {
+    function fund (uint256 amount) public override onPeriod {
         // Todo: Whitelist
         require(userFundInfo[msg.sender].amount == 0, "already funded");
         require(amount >= userMaxFundingAmount, "under min allocation");
@@ -176,8 +195,8 @@ contract Fund is IFund, Operator {
         userFundInfo[msg.sender].isClaimed = true;
 
         uint256 swapAmount = amount.mul(exchangeRate).div(EXCHANGE_RATE);
-        saleToken.safeTransfer(sender, swapAmount);
+        saleToken.safeTransfer(msg.sender, swapAmount);
 
-        emit Claimed(sender, swapAmount);
+        emit Claimed(msg.sender, swapAmount);
     }
 }
