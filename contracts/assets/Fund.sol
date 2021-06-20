@@ -14,6 +14,13 @@ import "hardhat/console.sol";
 
 
 interface IFund {
+    function initialize (bytes memory args) external;
+    function initPayload (
+        address _saleTokenAddress,
+        address exchangeTokenAddress,
+        address stakeAddress,
+        address _treasuryAddress
+    ) external pure returns (bytes memory);
     function fund (uint256 amount) external;
 }
 
@@ -76,7 +83,7 @@ contract Fund is IFund, Operator, Initializable {
 
     function initialize (
         bytes memory args
-    ) public initializer {
+    ) public override initializer {
         (
             address _saleTokenAddress,
             address exchangeTokenAddress,
@@ -88,6 +95,8 @@ contract Fund is IFund, Operator, Initializable {
         exchangeToken = IERC20(exchangeTokenAddress);
         stakeContract = IStake(stakeAddress);
         treasuryAddress = _treasuryAddress;
+
+        setRole(_msgSender(), _msgSender());
     }
 
     function initPayload (
@@ -95,7 +104,7 @@ contract Fund is IFund, Operator, Initializable {
         address exchangeTokenAddress,
         address stakeAddress,
         address _treasuryAddress
-    ) public view returns (bytes memory) {
+    ) public pure override returns (bytes memory) {
         return abi.encode(
             _saleTokenAddress,
             exchangeTokenAddress,
@@ -157,10 +166,10 @@ contract Fund is IFund, Operator, Initializable {
 
     function fund (uint256 amount) public override onPeriod {
         // Todo: Whitelist
-        require(userFundInfo[msg.sender].amount == 0, "already funded");
+        require(userFundInfo[_msgSender()].amount == 0, "already funded");
         require(amount >= userMaxFundingAmount, "under min allocation");
         require(amount <= userMinFundingAmount, "exceed max allocation");
-        require(stakeContract.isSatisfied(msg.sender), "dissatisfy stake conditions");
+        require(stakeContract.isSatisfied(_msgSender()), "dissatisfy stake conditions");
         require(totalFundedAmount <= targetAmount, "funding has been finished");
         uint256 availableAmount = _getAvailableAmount(amount);
 
@@ -171,32 +180,32 @@ contract Fund is IFund, Operator, Initializable {
             _claim();
         }
     }
-    function _getAvailableAmount (uint256 amount) private returns (uint256) {
+    function _getAvailableAmount (uint256 amount) private view returns (uint256) {
         uint256 remainAmount = targetAmount.sub(totalFundedAmount);
         return remainAmount >= amount ? amount : remainAmount;
 }
     function _fund (uint256 amount) private {
-        userFundInfo[msg.sender].amount = userFundInfo[msg.sender].amount.add(amount);
-        exchangeToken.safeTransferFrom(msg.sender, treasuryAddress, amount);
+        userFundInfo[_msgSender()].amount = userFundInfo[_msgSender()].amount.add(amount);
+        exchangeToken.safeTransferFrom(_msgSender(), treasuryAddress, amount);
 
         totalFundedAmount = totalFundedAmount.add(amount);
         totalBacker = uint32(totalBacker.add(1));
 
-        emit Funded(msg.sender, amount);
+        emit Funded(_msgSender(), amount);
     }
     function claim () public {
         require(releaseTime >= block.timestamp, "token is not released");
-        require(userFundInfo[msg.sender].isClaimed == false, "already claimed");
+        require(userFundInfo[_msgSender()].isClaimed == false, "already claimed");
         _claim();
     }
 
     function _claim () private {
-        uint256 amount = userFundInfo[msg.sender].amount;
-        userFundInfo[msg.sender].isClaimed = true;
+        uint256 amount = userFundInfo[_msgSender()].amount;
+        userFundInfo[_msgSender()].isClaimed = true;
 
         uint256 swapAmount = amount.mul(exchangeRate).div(EXCHANGE_RATE);
-        saleToken.safeTransfer(msg.sender, swapAmount);
+        saleToken.safeTransfer(_msgSender(), swapAmount);
 
-        emit Claimed(msg.sender, swapAmount);
+        emit Claimed(_msgSender(), swapAmount);
     }
 }

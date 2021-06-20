@@ -18,7 +18,7 @@ interface IStake {
         uint256 _minLockupAmount,
         uint256 _requiredStakeAmount,
         uint32 _requiredRetentionPeriod
-    ) external view returns (bytes memory);
+    ) external pure returns (bytes memory);
     function isSatisfied (address user) external returns (bool);
 }
 
@@ -79,6 +79,8 @@ contract Stake is IStake, Operator, Initializable {
         requiredStakeAmount = _requiredStakeAmount;
         // Timestamp
         requiredRetentionPeriod = _requiredRetentionPeriod;
+
+        setRole(_msgSender(), _msgSender());
     }
 
     function initPayload (
@@ -86,7 +88,7 @@ contract Stake is IStake, Operator, Initializable {
         uint256 _minLockupAmount,
         uint256 _requiredStakeAmount,
         uint32 _requiredRetentionPeriod
-    ) public view override returns (bytes memory) {
+    ) public pure override returns (bytes memory) {
         return abi.encode(
             _stakeTokenAddress,
             _minLockupAmount,
@@ -129,7 +131,7 @@ contract Stake is IStake, Operator, Initializable {
         _updateStakeInfo(sender, amount);
 
         emit Staked(
-            msg.sender, amount, userStakeAmountByBlockTime[sender][block.timestamp], block.timestamp
+            _msgSender(), amount, userStakeAmountByBlockTime[sender][block.timestamp], block.timestamp
         );
     }
 
@@ -163,7 +165,7 @@ contract Stake is IStake, Operator, Initializable {
         stakeToken.safeTransfer(sender, amount);
 
         emit UnStaked(
-            msg.sender, amount, userStakeAmountByBlockTime[sender][blockTime], blockTime
+            _msgSender(), amount, userStakeAmountByBlockTime[sender][blockTime], blockTime
         );
     }
 

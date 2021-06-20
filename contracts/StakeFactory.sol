@@ -42,10 +42,10 @@ contract StakeFactory is Ownable {
         bytes memory payload = IStake(instance).initPayload(
             _stakeTokenAddress, _minLockupAmount, _requiredStakeAmount, _requiredRetentionPeriod
         );
-        IStake(instance).initialize(payload);
-        console.log(instance);
+        Stake(instance).initialize(payload);
         stakeList.push(instance);
 
+        Stake(instance).transferOwnership(msg.sender);
         emit StakeCreated(instance);
         return instance;
     }
