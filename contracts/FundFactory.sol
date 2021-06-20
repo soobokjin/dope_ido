@@ -32,20 +32,26 @@ contract DopeFactory is Ownable {
         address _saleTokenAddress,
         address _exchangeTokenAddress,
         address _stakeAddress,
-        address _treasuryAddress
+        address _treasuryAddress,
+        uint256 _fundStartTime,
+        uint256 _fundingPeriod,
+        uint256 _releaseTime
     ) public returns (address stakeAddress) {
         address instance = Clones.cloneDeterministic(
             implementation,
             keccak256(abi.encode(_saleTokenAddress, _exchangeTokenAddress, _stakeAddress, _treasuryAddress))
         );
-        bytes memory payload = IFund(instance).initPayload(
+        Fund fundInstance = Fund(instance);
+        bytes memory payload = fundInstance.initPayload(
             _saleTokenAddress, _exchangeTokenAddress, _stakeAddress, _treasuryAddress
         );
-        Fund(instance).initialize(payload);
-        fundList.push(instance);
+        fundInstance.initialize(payload);
+        fundInstance.setPeriod(_fundStartTime, _fundingPeriod, _releaseTime);
+        fundInstance.transferOwnership(msg.sender);
 
-        Fund(instance).transferOwnership(msg.sender);
+        fundList.push(instance);
         emit FundCreated(instance);
+
         return instance;
     }
 }

@@ -36,17 +36,22 @@ contract StakeFactory is Ownable {
         address _stakeTokenAddress,
         uint256 _minLockupAmount,
         uint256 _requiredStakeAmount,
-        uint32 _requiredRetentionPeriod
+        uint32 _requiredRetentionPeriod,
+        uint256 _startTime,
+        uint256 _period
     ) public onlyOwner returns (address) {
         address instance = Clones.clone(implementation);
-        bytes memory payload = IStake(instance).initPayload(
+        Stake stakeInstance = Stake(instance);
+        bytes memory payload = stakeInstance.initPayload(
             _stakeTokenAddress, _minLockupAmount, _requiredStakeAmount, _requiredRetentionPeriod
         );
-        Stake(instance).initialize(payload);
-        stakeList.push(instance);
+        stakeInstance.initialize(payload);
+        stakeInstance.setPeriod(_startTime, _period);
+        stakeInstance.transferOwnership(msg.sender);
 
-        Stake(instance).transferOwnership(msg.sender);
+        stakeList.push(instance);
         emit StakeCreated(instance);
+
         return instance;
     }
 

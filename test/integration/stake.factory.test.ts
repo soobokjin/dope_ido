@@ -51,6 +51,8 @@ describe("DOPE", () => {
             10000,
             10000,
             10000,
+            0,
+            0
         );
         stakeImplementationContract = stakeFactory.attach(await stakeFactoryContract.implementation());
     });
