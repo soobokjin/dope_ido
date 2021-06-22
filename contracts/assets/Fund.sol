@@ -120,12 +120,13 @@ contract Fund is IFund, Operator, Initializable {
         uint256 _userMinFundingAmount,
         uint256 _userMaxFundingAmount
     ) public onlyOwner {
+        // targetAmount is dollar (not sale token amount)
         targetAmount = _targetAmount;
         exchangeRate = _exchangeRate;
         userMinFundingAmount = _userMinFundingAmount;
         userMaxFundingAmount = _userMaxFundingAmount;
 
-        uint256 totalSaleTokenAmount = _targetAmount.mul(_exchangeRate).div(EXCHANGE_RATE);
+        uint256 totalSaleTokenAmount = targetAmount.mul(exchangeRate).div(EXCHANGE_RATE);
         saleToken.safeTransferFrom(_senderAddress, address(this), totalSaleTokenAmount);
     }
 
@@ -166,10 +167,10 @@ contract Fund is IFund, Operator, Initializable {
 
     function fund (uint256 amount) public override onPeriod {
         // Todo: Whitelist
-        require(_targetAmount > 0, "sale token is not set");
+        require(targetAmount > 0, "sale token is not set");
         require(userFundInfo[_msgSender()].amount == 0, "already funded");
-        require(amount >= userMaxFundingAmount, "under min allocation");
-        require(amount <= userMinFundingAmount, "exceed max allocation");
+        require(amount >= userMinFundingAmount, "under min allocation");
+        require(amount <= userMaxFundingAmount, "exceed max allocation");
         require(stakeContract.isSatisfied(_msgSender()), "dissatisfy stake conditions");
         require(totalFundedAmount <= targetAmount, "funding has been finished");
         uint256 availableAmount = _getAvailableAmount(amount);
@@ -186,8 +187,10 @@ contract Fund is IFund, Operator, Initializable {
         return remainAmount >= amount ? amount : remainAmount;
 }
     function _fund (uint256 amount) private {
+        // Todo: token fallback
         userFundInfo[_msgSender()].amount = userFundInfo[_msgSender()].amount.add(amount);
-        exchangeToken.safeTransferFrom(_msgSender(), treasuryAddress, amount);
+        exchangeToken.safeTransferFrom(_msgSender(), address(this), amount);
+        exchangeToken.safeTransfer(treasuryAddress, amount);
 
         totalFundedAmount = totalFundedAmount.add(amount);
         totalBacker = uint32(totalBacker.add(1));
@@ -195,7 +198,7 @@ contract Fund is IFund, Operator, Initializable {
         emit Funded(_msgSender(), amount);
     }
     function claim () public {
-        require(releaseTime >= block.timestamp, "token is not released");
+        require(releaseTime <= block.timestamp, "token is not released");
         require(userFundInfo[_msgSender()].isClaimed == false, "already claimed");
         _claim();
     }
