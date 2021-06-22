@@ -165,7 +165,7 @@ contract Stake is IStake, Operator, Initializable {
         stakeToken.safeTransfer(sender, amount);
 
         emit UnStaked(
-            _msgSender(), amount, userStakeAmountByBlockTime[sender][blockTime], blockTime
+            sender, amount, userStakeAmountByBlockTime[sender][blockTime], blockTime
         );
     }
 

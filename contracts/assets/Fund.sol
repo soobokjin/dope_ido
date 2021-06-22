@@ -51,7 +51,7 @@ contract Fund is IFund, Operator, Initializable {
         uint256 amount;
         bool isClaimed;
     }
-    uint32 constant EXCHANGE_RATE = 10 ** 6;
+    uint256 constant EXCHANGE_RATE = 10 ** 18;
 
     Period public fundPeriod;
     uint256 public releaseTime;
@@ -86,14 +86,14 @@ contract Fund is IFund, Operator, Initializable {
     ) public override initializer {
         (
             address _saleTokenAddress,
-            address exchangeTokenAddress,
-            address stakeAddress,
+            address _exchangeTokenAddress,
+            address _stakeAddress,
             address _treasuryAddress
         ) = abi.decode(args, (address, address, address, address));
 
         saleToken = IERC20(_saleTokenAddress);
-        exchangeToken = IERC20(exchangeTokenAddress);
-        stakeContract = IStake(stakeAddress);
+        exchangeToken = IERC20(_exchangeTokenAddress);
+        stakeContract = IStake(_stakeAddress);
         treasuryAddress = _treasuryAddress;
 
         setRole(_msgSender(), _msgSender());
@@ -101,14 +101,14 @@ contract Fund is IFund, Operator, Initializable {
 
     function initPayload (
         address _saleTokenAddress,
-        address exchangeTokenAddress,
-        address stakeAddress,
+        address _exchangeTokenAddress,
+        address _stakeAddress,
         address _treasuryAddress
     ) public pure override returns (bytes memory) {
         return abi.encode(
             _saleTokenAddress,
-            exchangeTokenAddress,
-            stakeAddress,
+            _exchangeTokenAddress,
+            _stakeAddress,
             _treasuryAddress
         );
     }
@@ -166,6 +166,7 @@ contract Fund is IFund, Operator, Initializable {
 
     function fund (uint256 amount) public override onPeriod {
         // Todo: Whitelist
+        require(_targetAmount > 0, "sale token is not set");
         require(userFundInfo[_msgSender()].amount == 0, "already funded");
         require(amount >= userMaxFundingAmount, "under min allocation");
         require(amount <= userMinFundingAmount, "exceed max allocation");
