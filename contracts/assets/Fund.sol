@@ -51,7 +51,7 @@ contract Fund is IFund, Operator, Initializable {
         uint256 amount;
         bool isClaimed;
     }
-    uint256 constant EXCHANGE_RATE = 10 ** 18;
+    uint256 constant EXCHANGE_RATE = 10 ** 6;
 
     Period public fundPeriod;
     uint256 public releaseTime;

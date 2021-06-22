@@ -39,7 +39,7 @@ describe("Stake", () => {
         );
     });
 
-    beforeEach("fetch stake contract factories", async () => {
+    beforeEach("fetch stake contract", async () => {
         let defaultTimeBefore: number = DAY
         let args;
         stake = await ethers.getContractFactory('Stake');

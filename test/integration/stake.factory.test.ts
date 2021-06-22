@@ -57,13 +57,9 @@ describe("DOPE", () => {
         stakeImplementationContract = stakeFactory.attach(await stakeFactoryContract.implementation());
     });
 
+    // Todo: supplement tests
     it("", async () => {
         let created_address: string = await stakeFactoryContract.getStakeAddressOf(0);
         stakeProxyContract = stakeFactory.attach(created_address);
-        console.log(await stakeProxyContract.connect(dopeOwner).owner());
-        console.log(await stakeProxyContract.connect(dopeOwner).operator());
-
-        console.log(await stakeProxyContract.connect(dopeOwner).requiredRetentionPeriod());
-        console.log(await stakeProxyContract.connect(dopeOwner).requiredRetentionPeriod());
     });
 });
