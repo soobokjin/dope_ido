@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Fund} from  './assets/Fund.sol';
+import {Fund} from "./assets/Fund.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {Fund, IFund} from './assets/Fund.sol';
-import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
+import {Fund, IFund} from "./assets/Fund.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract DopeFactory is Ownable {
     event FundCreated(address indexed fund);
@@ -28,7 +28,7 @@ contract DopeFactory is Ownable {
         return fundList[index];
     }
 
-    function createFund (
+    function createFund(
         address _saleTokenAddress,
         address _exchangeTokenAddress,
         address _stakeAddress,
@@ -39,11 +39,21 @@ contract DopeFactory is Ownable {
     ) public returns (address stakeAddress) {
         address instance = Clones.cloneDeterministic(
             implementation,
-            keccak256(abi.encode(_saleTokenAddress, _exchangeTokenAddress, _stakeAddress, _treasuryAddress))
+            keccak256(
+                abi.encode(
+                    _saleTokenAddress,
+                    _exchangeTokenAddress,
+                    _stakeAddress,
+                    _treasuryAddress
+                )
+            )
         );
         Fund fundInstance = Fund(instance);
         bytes memory payload = fundInstance.initPayload(
-            _saleTokenAddress, _exchangeTokenAddress, _stakeAddress, _treasuryAddress
+            _saleTokenAddress,
+            _exchangeTokenAddress,
+            _stakeAddress,
+            _treasuryAddress
         );
         fundInstance.initialize(payload);
         fundInstance.setPeriod(_fundStartTime, _fundingPeriod, _releaseTime);

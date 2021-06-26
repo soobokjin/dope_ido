@@ -1,28 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Fund} from  './assets/Fund.sol';
+import {Fund} from "./assets/Fund.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {Stake, IStake} from './assets/Stake.sol';
-import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
+import {Stake, IStake} from "./assets/Stake.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
 contract StakeFactory is Ownable {
-    event StakeCreated(
-        address indexed stake
-    );
+    event StakeCreated(address indexed stake);
 
     address public implementation;
     address[] public stakeList;
 
     constructor() {
         Stake stake = new Stake();
-        bytes memory payload = stake.initPayload(
-            address(0x0),
-            0,
-            0,
-            0
-        );
+        bytes memory payload = stake.initPayload(address(0x0), 0, 0, 0);
         stake.initialize(payload);
         implementation = address(stake);
     }
@@ -43,7 +36,10 @@ contract StakeFactory is Ownable {
         address instance = Clones.clone(implementation);
         Stake stakeInstance = Stake(instance);
         bytes memory payload = stakeInstance.initPayload(
-            _stakeTokenAddress, _minLockupAmount, _requiredStakeAmount, _requiredRetentionPeriod
+            _stakeTokenAddress,
+            _minLockupAmount,
+            _requiredStakeAmount,
+            _requiredRetentionPeriod
         );
         stakeInstance.initialize(payload);
         stakeInstance.setPeriod(_startTime, _period);
@@ -54,5 +50,4 @@ contract StakeFactory is Ownable {
 
         return instance;
     }
-
 }
