@@ -49,7 +49,7 @@ contract Fund is IFund, Operator, Initializable {
 
     struct FundInfo {
         uint256 amount;
-        bool isClaimed;
+        uint256 claimedAmount;
     }
     uint256 constant EXCHANGE_RATE = 10 ** 6;
 
@@ -70,7 +70,6 @@ contract Fund is IFund, Operator, Initializable {
     // expressed to six decimal places. e.g. exchange_rate 1 means 0.000001
     mapping (address => FundInfo) public userFundInfo;
 
-    uint32 public totalBacker;
     uint256 public totalFundedAmount;
 
     modifier onPeriod () {
@@ -158,56 +157,57 @@ contract Fund is IFund, Operator, Initializable {
     }
 
     function getClaimedAmount (address user) public view returns (uint256) {
-        if (userFundInfo[user].isClaimed == false) {
+        if (userFundInfo[user].claimedAmount == 0) {
             return 0;
         }
-        uint256 amount = userFundInfo[user].amount;
-        return amount.mul(exchangeRate).div(EXCHANGE_RATE);
+        return userFundInfo[user].claimedAmount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
     function fund (uint256 amount) public override onPeriod {
         // Todo: Whitelist
-        require(targetAmount > 0, "sale token is not set");
-        require(userFundInfo[_msgSender()].amount == 0, "already funded");
-        require(amount >= userMinFundingAmount, "under min allocation");
-        require(amount <= userMaxFundingAmount, "exceed max allocation");
-        require(stakeContract.isSatisfied(_msgSender()), "dissatisfy stake conditions");
-        require(totalFundedAmount <= targetAmount, "funding has been finished");
+        FundInfo memory _info = userFundInfo[_msgSender()];
+        require(targetAmount > 0, "FUND: sale token is not set");
+        require(totalFundedAmount <= targetAmount, "FUND: funding has been finished");
+        require(amount >= userMinFundingAmount, "FUND: under min allocation");
+        require(stakeContract.isSatisfied(_msgSender()), "FUND: dissatisfy stake conditions");
+        require(_info.amount.add(amount) <= userMaxFundingAmount, "FUND: exceed amount");
         uint256 availableAmount = _getAvailableAmount(amount);
 
         // if lock up period is exist, do not swap.
-        _fund(availableAmount);
+        _fund(_info, availableAmount);
 
         if (block.timestamp >= releaseTime) {
-            _claim();
+            _claim(_info);
         }
     }
-    function _getAvailableAmount (uint256 amount) private view returns (uint256) {
+    function _getAvailableAmount (uint256 amount) internal view returns (uint256) {
         uint256 remainAmount = targetAmount.sub(totalFundedAmount);
         return remainAmount >= amount ? amount : remainAmount;
 }
-    function _fund (uint256 amount) private {
+    function _fund (FundInfo memory _info, uint256 amount) internal {
         // Todo: token fallback
-        userFundInfo[_msgSender()].amount = userFundInfo[_msgSender()].amount.add(amount);
-        exchangeToken.safeTransferFrom(_msgSender(), address(this), amount);
-        exchangeToken.safeTransfer(treasuryAddress, amount);
-
+        _info.amount = _info.amount.add(amount);
         totalFundedAmount = totalFundedAmount.add(amount);
-        totalBacker = uint32(totalBacker.add(1));
+        userFundInfo[_msgSender()] = _info;
+
+        exchangeToken.safeTransferFrom(_msgSender(), treasuryAddress, amount);
 
         emit Funded(_msgSender(), amount);
     }
     function claim () public {
+        FundInfo memory _info = userFundInfo[_msgSender()];
         require(releaseTime <= block.timestamp, "token is not released");
-        require(userFundInfo[_msgSender()].isClaimed == false, "already claimed");
-        _claim();
+        require(_info.amount.sub(_info.claimedAmount) > 0, "already claimed");
+
+        _claim(_info);
     }
 
-    function _claim () private {
-        uint256 amount = userFundInfo[_msgSender()].amount;
-        userFundInfo[_msgSender()].isClaimed = true;
+    function _claim (FundInfo memory _info) internal {
+        uint256 claimAmount = _info.amount.sub(_info.claimedAmount);
+        _info.claimedAmount = _info.claimedAmount.add(claimAmount);
+        userFundInfo[_msgSender()] = _info;
 
-        uint256 swapAmount = amount.mul(exchangeRate).div(EXCHANGE_RATE);
+        uint256 swapAmount = claimAmount.mul(exchangeRate).div(EXCHANGE_RATE);
         saleToken.safeTransfer(_msgSender(), swapAmount);
 
         emit Claimed(_msgSender(), swapAmount);
