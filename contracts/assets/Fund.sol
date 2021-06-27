@@ -181,16 +181,15 @@ contract Fund is IFund, Operator, Initializable {
 
     function fund (uint256 amount) public override onPeriod {
         // Todo: Whitelist
-        FundInfo memory _info = userFundInfo[_msgSender()];
         require(targetAmount > 0, "FUND: sale token is not set");
         require(totalFundedAmount <= targetAmount, "FUND: funding has been finished");
         require(amount >= userMinFundingAmount, "FUND: under min allocation");
         require(stakeContract.isSatisfied(_msgSender()), "FUND: dissatisfy stake conditions");
+        FundInfo memory _info = userFundInfo[_msgSender()];
         require(_info.amount.add(amount) <= userMaxFundingAmount, "FUND: exceed amount");
-        uint256 availableAmount = _getAvailableAmount(amount);
 
         // if lock up period is exist, do not swap.
-        _fund(_info, availableAmount);
+        _fund(_info, amount);
 
         if (block.timestamp >= releaseTime) {
             _claim(_info);
@@ -201,28 +200,29 @@ contract Fund is IFund, Operator, Initializable {
         return remainAmount >= amount ? amount : remainAmount;
 }
     function _fund (FundInfo memory _info, uint256 amount) internal {
-        // Todo: token fallback
-        _info.amount = _info.amount.add(amount);
-        totalFundedAmount = totalFundedAmount.add(amount);
+        uint256 availableAmount = _getAvailableAmount(amount);
+        _info.amount = _info.amount.add(availableAmount);
+        totalFundedAmount = totalFundedAmount.add(availableAmount);
         userFundInfo[_msgSender()] = _info;
 
-        exchangeToken.safeTransferFrom(_msgSender(), treasuryAddress, amount);
+        exchangeToken.safeTransferFrom(_msgSender(), treasuryAddress, availableAmount);
 
-        emit Funded(_msgSender(), amount);
+        emit Funded(_msgSender(), availableAmount);
     }
     function claim () public {
         FundInfo memory _info = userFundInfo[_msgSender()];
-        require(releaseTime <= block.timestamp, "token is not released");
-        require(_info.amount.sub(_info.claimedAmount) > 0, "already claimed");
+        require(releaseTime <= block.timestamp, "CLAIM: token is not released");
+        require(_info.amount.sub(_info.claimedAmount) > 0, "CLAIM: already claimed");
 
         _claim(_info);
     }
 
     function _claim (FundInfo memory _info) internal {
         uint256 claimAmount = _info.amount.sub(_info.claimedAmount);
+        uint256 swapAmount = claimAmount.mul(exchangeRate).div(EXCHANGE_RATE);
         _info.claimedAmount = _info.claimedAmount.add(claimAmount);
         userFundInfo[_msgSender()] = _info;
-        uint256 swapAmount = claimAmount.mul(exchangeRate).div(EXCHANGE_RATE);
+
         saleToken.safeTransfer(_msgSender(), swapAmount);
 
         emit Claimed(_msgSender(), swapAmount);
