@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
+import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.sol';
@@ -27,6 +28,7 @@ interface IFund {
 
 contract Fund is IFund, Operator, Initializable {
     using SafeMath for uint;
+    using SafeMath for uint8;
     using SafeMath for uint32;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -51,7 +53,7 @@ contract Fund is IFund, Operator, Initializable {
         uint256 amount;
         uint256 claimedAmount;
     }
-    uint256 constant EXCHANGE_RATE = 10 ** 6;
+    uint256 constant EXCHANGE_RATE = 1e18;
 
     Period public fundPeriod;
     uint256 public releaseTime;
@@ -121,12 +123,26 @@ contract Fund is IFund, Operator, Initializable {
     ) public onlyOwner {
         // targetAmount is dollar (not sale token amount)
         targetAmount = _targetAmount;
-        exchangeRate = _exchangeRate;
         userMinFundingAmount = _userMinFundingAmount;
         userMaxFundingAmount = _userMaxFundingAmount;
+        exchangeRate = getDecimalAppliedExchangeRate(_exchangeRate);
 
         uint256 totalSaleTokenAmount = targetAmount.mul(exchangeRate).div(EXCHANGE_RATE);
         saleToken.safeTransferFrom(_senderAddress, address(this), totalSaleTokenAmount);
+    }
+
+    function getDecimalAppliedExchangeRate(uint256 _exchangeRate) internal view returns (uint256) {
+        uint8 exchangeTokenDecimals = ERC20(address(exchangeToken)).decimals();
+        uint8 saleTokenDecimals = ERC20(address(saleToken)).decimals();
+        uint256 actualExchangeRate;
+
+        if (exchangeTokenDecimals <= saleTokenDecimals) {
+            actualExchangeRate = _exchangeRate.mul(10 ** saleTokenDecimals.sub(exchangeTokenDecimals));
+        } else {
+            actualExchangeRate = _exchangeRate.div(10 ** exchangeTokenDecimals.sub(saleTokenDecimals));
+        }
+
+        return actualExchangeRate;
     }
 
     function setPeriod (uint256 _fundStartTime, uint256 _fundingPeriod, uint256 _releaseTime)
@@ -206,7 +222,6 @@ contract Fund is IFund, Operator, Initializable {
         uint256 claimAmount = _info.amount.sub(_info.claimedAmount);
         _info.claimedAmount = _info.claimedAmount.add(claimAmount);
         userFundInfo[_msgSender()] = _info;
-
         uint256 swapAmount = claimAmount.mul(exchangeRate).div(EXCHANGE_RATE);
         saleToken.safeTransfer(_msgSender(), swapAmount);
 
