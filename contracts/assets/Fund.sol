@@ -47,6 +47,17 @@ contract Fund is IFund, Operator, Initializable {
         uint256 exchangeRate
     );
 
+    event WithDraw(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
+
+    event WithDrawEther(
+        address indexed user,
+        uint256 amount
+    );
+
     struct Period {
         uint256 period;
         uint256 periodFinish;
@@ -77,6 +88,7 @@ contract Fund is IFund, Operator, Initializable {
     mapping (address => FundInfo) public userFundInfo;
 
     uint256 public totalFundedAmount;
+    uint256 public totalClaimedSaleTokenAmount;
 
     modifier onPeriod () {
         require(
@@ -164,6 +176,10 @@ contract Fund is IFund, Operator, Initializable {
         return targetAmount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
+    function getTotalClaimedSaleTokenAmount() public view returns (uint256) {
+        return totalClaimedSaleTokenAmount;
+    }
+
     function getTargetAmount() public view returns (uint256) {
         return targetAmount;
     }
@@ -228,9 +244,28 @@ contract Fund is IFund, Operator, Initializable {
         uint256 swapAmount = claimAmount.mul(exchangeRate).div(EXCHANGE_RATE);
         _info.claimedAmount = _info.claimedAmount.add(claimAmount);
         userFundInfo[_msgSender()] = _info;
+        totalClaimedSaleTokenAmount = totalClaimedSaleTokenAmount.add(swapAmount);
 
         saleToken.safeTransfer(_msgSender(), swapAmount);
 
         emit Claimed(_msgSender(), address(saleToken), swapAmount, exchangeRate);
+    }
+
+    function emergencyWithdraw(address _token, uint256 amount, address to) public onlyOwner {
+        if (_token == address(saleToken)) {
+            uint256 totalAmount = saleToken.balanceOf(address(this)).add(totalClaimedSaleTokenAmount);
+            uint256 fundAmount = targetAmount.mul(exchangeRate).div(EXCHANGE_RATE);
+            require(totalAmount.sub(fundAmount) > amount, "EMERGENCY: not allowed");
+        }
+
+        IERC20(_token).safeTransfer(_to, amount);
+
+        emit WithDraw(to, _token, amount);
+    }
+
+    function emergencyWithdraw(address payable _to, uint256 amount) public onlyOwner {
+        _to.transfer(amount);
+
+        emit WithDrawEther(_to, amount);
     }
 }
