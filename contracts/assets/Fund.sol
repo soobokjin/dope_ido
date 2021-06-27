@@ -251,7 +251,7 @@ contract Fund is IFund, Operator, Initializable {
         emit Claimed(_msgSender(), address(saleToken), swapAmount, exchangeRate);
     }
 
-    function emergencyWithdraw(address _token, uint256 amount, address to) public onlyOwner {
+    function emergencyWithdraw(address _token, uint256 amount, address _to) public onlyOwner {
         if (_token == address(saleToken)) {
             uint256 totalAmount = saleToken.balanceOf(address(this)).add(totalClaimedSaleTokenAmount);
             uint256 fundAmount = targetAmount.mul(exchangeRate).div(EXCHANGE_RATE);
@@ -260,7 +260,7 @@ contract Fund is IFund, Operator, Initializable {
 
         IERC20(_token).safeTransfer(_to, amount);
 
-        emit WithDraw(to, _token, amount);
+        emit WithDraw(_to, _token, amount);
     }
 
     function emergencyWithdraw(address payable _to, uint256 amount) public onlyOwner {
