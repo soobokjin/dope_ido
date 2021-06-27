@@ -35,12 +35,16 @@ contract Fund is IFund, Operator, Initializable {
 
     event Funded(
         address indexed user,
-        uint256 amount
+        address indexed token,
+        uint256 amount,
+        uint256 exchangeRate
     );
 
     event Claimed(
         address indexed user,
-        uint256 amount
+        address indexed token,
+        uint256 amount,
+        uint256 exchangeRate
     );
 
     struct Period {
@@ -185,21 +189,22 @@ contract Fund is IFund, Operator, Initializable {
         require(totalFundedAmount <= targetAmount, "FUND: funding has been finished");
         require(amount >= userMinFundingAmount, "FUND: under min allocation");
         require(stakeContract.isSatisfied(_msgSender()), "FUND: dissatisfy stake conditions");
-        FundInfo memory _info = userFundInfo[_msgSender()];
-        require(_info.amount.add(amount) <= userMaxFundingAmount, "FUND: exceed amount");
 
         // if lock up period is exist, do not swap.
-        _fund(_info, amount);
+        _fund(amount);
 
         if (block.timestamp >= releaseTime) {
-            _claim(_info);
+            _claim();
         }
     }
     function _getAvailableAmount (uint256 amount) internal view returns (uint256) {
         uint256 remainAmount = targetAmount.sub(totalFundedAmount);
         return remainAmount >= amount ? amount : remainAmount;
 }
-    function _fund (FundInfo memory _info, uint256 amount) internal {
+    function _fund (uint256 amount) internal {
+        FundInfo memory _info = userFundInfo[_msgSender()];
+        require(_info.amount.add(amount) <= userMaxFundingAmount, "FUND: exceed amount");
+
         uint256 availableAmount = _getAvailableAmount(amount);
         _info.amount = _info.amount.add(availableAmount);
         totalFundedAmount = totalFundedAmount.add(availableAmount);
@@ -207,17 +212,18 @@ contract Fund is IFund, Operator, Initializable {
 
         exchangeToken.safeTransferFrom(_msgSender(), treasuryAddress, availableAmount);
 
-        emit Funded(_msgSender(), availableAmount);
+        emit Funded(_msgSender(), address(saleToken), availableAmount, exchangeRate);
     }
     function claim () public {
-        FundInfo memory _info = userFundInfo[_msgSender()];
         require(releaseTime <= block.timestamp, "CLAIM: token is not released");
-        require(_info.amount.sub(_info.claimedAmount) > 0, "CLAIM: already claimed");
 
-        _claim(_info);
+        _claim();
     }
 
-    function _claim (FundInfo memory _info) internal {
+    function _claim () internal {
+        FundInfo memory _info = userFundInfo[_msgSender()];
+        require(_info.amount.sub(_info.claimedAmount) > 0, "CLAIM: already claimed");
+
         uint256 claimAmount = _info.amount.sub(_info.claimedAmount);
         uint256 swapAmount = claimAmount.mul(exchangeRate).div(EXCHANGE_RATE);
         _info.claimedAmount = _info.claimedAmount.add(claimAmount);
@@ -225,6 +231,6 @@ contract Fund is IFund, Operator, Initializable {
 
         saleToken.safeTransfer(_msgSender(), swapAmount);
 
-        emit Claimed(_msgSender(), swapAmount);
+        emit Claimed(_msgSender(), address(saleToken), swapAmount, exchangeRate);
     }
 }
