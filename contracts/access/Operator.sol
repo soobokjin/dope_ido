@@ -1,47 +1,58 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
+import {Context} from '@openzeppelin/contracts/access/Ownable.sol';
 
-abstract contract Operator is Context, Ownable {
-    address private _operator;
 
-    event OperatorTransferred(
-        address indexed previousOperator,
-        address indexed newOperator
-    );
+contract Operator is Context {
+    address public owner;
+    address public operator;
 
     constructor() {
-        _operator = _msgSender();
-        emit OperatorTransferred(address(0), _operator);
+        owner = _msgSender();
+        operator = _msgSender();
     }
 
-    function operator() public view returns (address) {
-        return _operator;
+    function setRole(address _owner, address _operator) internal virtual {
+        owner = _owner;
+        operator = _operator;
     }
 
-    modifier onlyOperator() {
-        require(
-            _operator == _msgSender(),
-            'operator: caller is not the operator'
-        );
+    modifier onlyOwner {
+        require(checkOwner(), "Operator: owner access denied");
+
         _;
     }
 
-    function isOperator() public view returns (bool) {
-        return _msgSender() == _operator;
+    function checkOwner() public view returns (bool) {
+        return _msgSender() == owner;
     }
 
-    function transferOperator(address newOperator_) public onlyOwner {
-        _transferOperator(newOperator_);
+    modifier onlyOperator {
+        require(checkOperator(), "Operator: operator access denied");
+
+        _;
     }
 
-    function _transferOperator(address newOperator_) internal {
-        require(
-            newOperator_ != address(0),
-            'operator: zero address given for new operator'
-        );
-        emit OperatorTransferred(address(0), newOperator_);
-        _operator = newOperator_;
+    function checkOperator() public view returns (bool) {
+        return _msgSender() == operator;
+    }
+
+    modifier onlyGranted {
+        require(checkGranted(), "Operator: access denied");
+
+        _;
+    }
+
+    function checkGranted() public view returns (bool) {
+        return checkOwner() || checkOperator();
+    }
+
+    function transferOwnership(address _owner) public onlyOwner {
+        owner = _owner;
+    }
+
+    function transferOperator(address _operator) public onlyOwner {
+        operator = _operator;
     }
 }
