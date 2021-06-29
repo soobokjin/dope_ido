@@ -78,14 +78,6 @@ contract Fund is IFund, Operator, Initializable {
 
     uint256 public totalFundedAmount;
 
-    modifier onPeriod () {
-        require(
-            fundPeriod.startTime <= block.timestamp && block.timestamp < fundPeriod.periodFinish,
-            "not on funding period"
-        );
-        _;
-    }
-
     function initialize (
         bytes memory args
     ) public override initializer {
@@ -183,12 +175,17 @@ contract Fund is IFund, Operator, Initializable {
         return userFundInfo[user].claimedAmount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
-    function fund (uint256 amount) public override onPeriod {
+    function fund (uint256 amount) public override {
         // Todo: Whitelist
-        require(targetAmount > 0, "FUND: sale token is not set");
-        require(totalFundedAmount <= targetAmount, "FUND: funding has been finished");
-        require(amount >= userMinFundingAmount, "FUND: under min allocation");
-        require(stakeContract.isSatisfied(_msgSender()), "FUND: dissatisfy stake conditions");
+        require(
+            fundPeriod.startTime <= block.timestamp && block.timestamp < fundPeriod.periodFinish,
+            "Fund: not on funding period"
+        );
+        require(targetAmount > 0, "Fund: sale token is not set");
+        require(totalFundedAmount <= targetAmount, "Fund: funding has been finished");
+        require(amount >= userMinFundingAmount, "Fund: under min allocation");
+        require(stakeContract.isSatisfied(_msgSender()), "Fund: dissatisfy stake conditions");
+
 
         // if lock up period is exist, do not swap.
         _fund(amount);
@@ -203,7 +200,7 @@ contract Fund is IFund, Operator, Initializable {
 }
     function _fund (uint256 amount) internal {
         FundInfo memory _info = userFundInfo[_msgSender()];
-        require(_info.amount.add(amount) <= userMaxFundingAmount, "FUND: exceed amount");
+        require(_info.amount.add(amount) <= userMaxFundingAmount, "Fund: exceed amount");
 
         uint256 availableAmount = _getAvailableAmount(amount);
         _info.amount = _info.amount.add(availableAmount);
@@ -215,14 +212,14 @@ contract Fund is IFund, Operator, Initializable {
         emit Funded(_msgSender(), address(saleToken), availableAmount, exchangeRate);
     }
     function claim () public {
-        require(releaseTime <= block.timestamp, "CLAIM: token is not released");
+        require(releaseTime <= block.timestamp, "Fund: token is not released");
 
         _claim();
     }
 
     function _claim () internal {
         FundInfo memory _info = userFundInfo[_msgSender()];
-        require(_info.amount.sub(_info.claimedAmount) > 0, "CLAIM: already claimed");
+        require(_info.amount.sub(_info.claimedAmount) > 0, "Fund: already claimed");
 
         uint256 claimAmount = _info.amount.sub(_info.claimedAmount);
         uint256 swapAmount = claimAmount.mul(exchangeRate).div(EXCHANGE_RATE);
