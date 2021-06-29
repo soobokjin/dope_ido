@@ -255,7 +255,7 @@ contract Fund is IFund, Operator, Initializable {
         if (_token == address(saleToken)) {
             uint256 totalAmount = saleToken.balanceOf(address(this)).add(totalClaimedSaleTokenAmount);
             uint256 fundAmount = targetAmount.mul(exchangeRate).div(EXCHANGE_RATE);
-            require(totalAmount.sub(fundAmount) > amount, "EMERGENCY: not allowed");
+            require(totalAmount.sub(fundAmount) > amount, "Fund: not allowed");
         }
 
         IERC20(_token).safeTransfer(_to, amount);
