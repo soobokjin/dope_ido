@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
+import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
 import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
@@ -195,9 +196,9 @@ contract Fund is IFund, Operator, Initializable {
         }
     }
     function _getAvailableAmount (uint256 amount) internal view returns (uint256) {
-        uint256 remainAmount = targetAmount.sub(totalFundedAmount);
-        return remainAmount >= amount ? amount : remainAmount;
-}
+        return Math.min(amount, targetAmount.sub(totalFundedAmount));
+    }
+
     function _fund (uint256 amount) internal {
         FundInfo memory _info = userFundInfo[_msgSender()];
         require(_info.amount.add(amount) <= userMaxFundingAmount, "Fund: exceed amount");
