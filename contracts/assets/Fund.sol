@@ -176,7 +176,9 @@ contract Fund is IFund, Operator, Initializable {
         return userFundInfo[user].claimedAmount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
-    function fund (uint256 amount) public override {
+    function fund (
+        uint256 _amount, bytes32[] memory _proof, uint32 _index
+    ) public override {
         // Todo: Whitelist
         require(
             fundPeriod.startTime <= block.timestamp && block.timestamp < fundPeriod.periodFinish,
@@ -184,12 +186,16 @@ contract Fund is IFund, Operator, Initializable {
         );
         require(targetAmount > 0, "Fund: sale token is not set");
         require(totalFundedAmount <= targetAmount, "Fund: funding has been finished");
-        require(amount >= userMinFundingAmount, "Fund: under min allocation");
-        require(stakeContract.isSatisfied(_msgSender()), "Fund: dissatisfy stake conditions");
+        require(_amount >= userMinFundingAmount, "Fund: under min allocation");
+        require(
+            stakeContract.isWhiteListed(
+                _msgSender(), address(saleToken), _proof, _index
+            ), "Fund: dissatisfy stake conditions"
+        );
 
 
         // if lock up period is exist, do not swap.
-        _fund(amount);
+        _fund(_amount);
 
         if (block.timestamp >= releaseTime) {
             _claim();
