@@ -23,7 +23,7 @@ interface IFund {
         address stakeAddress,
         address _treasuryAddress
     ) external pure returns (bytes memory);
-    function fund (uint256 amount) external;
+    function fund (uint256 _amount, bytes32[] memory _proof, uint32 _index) external;
 }
 
 
@@ -188,11 +188,9 @@ contract Fund is IFund, Operator, Initializable {
         require(totalFundedAmount <= targetAmount, "Fund: funding has been finished");
         require(_amount >= userMinFundingAmount, "Fund: under min allocation");
         require(
-            stakeContract.isWhiteListed(
-                _msgSender(), address(saleToken), _proof, _index
-            ), "Fund: dissatisfy stake conditions"
+            stakeContract.isWhiteListed(_msgSender(), address(saleToken), _proof, _index),
+            "Fund: dissatisfy stake conditions"
         );
-
 
         // if lock up period is exist, do not swap.
         _fund(_amount);

@@ -22,7 +22,7 @@ contract MerkleProof {
                 hash = keccak256(abi.encodePacked(proofElement, hash));
             }
 
-            _index = _index.div(2);
+            _index = uint32(_index.div(2));
         }
 
         return hash == _root;

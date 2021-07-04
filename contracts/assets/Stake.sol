@@ -16,10 +16,7 @@ import "hardhat/console.sol";
 interface IStake {
     function initialize (bytes memory args) external;
     function initPayload (
-        address _stakeTokenAddress,
-        uint256 _minLockupAmount,
-        uint256 _requiredStakeAmount,
-        uint32 _requiredRetentionPeriod
+        address _stakeTokenAddress
     ) external pure returns (bytes memory);
     function isWhiteListed (
         address _user,
@@ -92,8 +89,8 @@ contract Stake is IStake, Operator, Initializable {
         if (length == 0) {
             return 0;
         }
-        uint256 lastBlockTime = userStakeChangedBlockTime[_user][length - 1];
-        return userStakeAmountByBlockTime[_user][lastBlockTime];
+        uint256 lastBlockTime = userStakeChangedBlockTime[_user][_stakeTokenAddress][length.sub(1)];
+        return userStakeAmountByBlockTime[_user][_stakeTokenAddress][lastBlockTime];
     }
 
     function registerSaleTokenWhiteList(
@@ -104,7 +101,6 @@ contract Stake is IStake, Operator, Initializable {
     }
 
     function stake (uint256 _amount, address _stakeTokenAddress) public isRegistered(_stakeTokenAddress) {
-        require(_amount >= minLockupAmount, "Stake: insufficient amount");
         IERC20(_stakeTokenAddress).safeTransferFrom(_msgSender(), address(this), _amount);
         _updateStakeInfo(_msgSender(), _stakeTokenAddress, _amount);
 
@@ -112,7 +108,7 @@ contract Stake is IStake, Operator, Initializable {
             _msgSender(),
             _stakeTokenAddress,
             _amount,
-            userStakeAmountByBlockTime[_msgSender()][block.timestamp],
+            userStakeAmountByBlockTime[_msgSender()][_stakeTokenAddress][block.timestamp],
             block.timestamp
         );
     }
@@ -125,7 +121,7 @@ contract Stake is IStake, Operator, Initializable {
             userStakeAmountByBlockTime[_sender][_stakeTokenAddress][block.timestamp] = _amount;
         }
         else {
-            uint256 stakedAmount = _getUserStakeAmount();
+            uint256 stakedAmount = _getUserStakeAmount(_stakeTokenAddress);
             userStakeChangedBlockTime[_sender][_stakeTokenAddress].push(block.timestamp);
             userStakeAmountByBlockTime[_sender][_stakeTokenAddress][block.timestamp] = stakedAmount.add(_amount);
         }
@@ -134,19 +130,23 @@ contract Stake is IStake, Operator, Initializable {
     function unStake (uint256 _amount, address _stakeTokenAddress) public isRegistered(_stakeTokenAddress) {
         require(userStakeChangedBlockTime[_msgSender()][_stakeTokenAddress].length > 0, "Stake: stake amount is 0");
         uint256 blockTime = block.timestamp;
-        uint256 stakedAmount = _getUserStakeAmount();
+        uint256 stakedAmount = _getUserStakeAmount(_stakeTokenAddress);
         require(stakedAmount >= _amount, "invalid amount. stakedAmount < amount");
 
-        userStakeChangedBlockTime[_msgSender()].push(blockTime);
-        userStakeAmountByBlockTime[_msgSender()][blockTime] = stakedAmount.sub(_amount);
+        userStakeChangedBlockTime[_msgSender()][_stakeTokenAddress].push(blockTime);
+        userStakeAmountByBlockTime[_msgSender()][_stakeTokenAddress][blockTime] = stakedAmount.sub(_amount);
         IERC20(_stakeTokenAddress).safeTransfer(_msgSender(), _amount);
 
         emit UnStaked(
-            _msgSender(), _stakeTokenAddress, _amount, userStakeAmountByBlockTime[_msgSender()][blockTime], blockTime
+            _msgSender(),
+            _stakeTokenAddress,
+            _amount,
+            userStakeAmountByBlockTime[_msgSender()][_stakeTokenAddress][blockTime],
+            blockTime
         );
     }
 
-    function _getUserStakeAmount() internal view returns (uint256) {
+    function _getUserStakeAmount(address _stakeTokenAddress) internal view returns (uint256) {
         uint256 historyLength = userStakeChangedBlockTime[_msgSender()][_stakeTokenAddress].length;
         uint256 lastChangedBlockTime = userStakeChangedBlockTime[_msgSender()][_stakeTokenAddress][historyLength.sub(1)];
 
