@@ -2,6 +2,8 @@
 pragma solidity ^0.8.0;
 
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
+import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
+import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.sol';
@@ -27,18 +29,23 @@ interface IFund {
 
 contract Fund is IFund, Operator, Initializable {
     using SafeMath for uint;
+    using SafeMath for uint8;
     using SafeMath for uint32;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     event Funded(
         address indexed user,
-        uint256 amount
+        address indexed token,
+        uint256 amount,
+        uint256 exchangeRate
     );
 
     event Claimed(
         address indexed user,
-        uint256 amount
+        address indexed token,
+        uint256 amount,
+        uint256 exchangeRate
     );
 
     struct Period {
@@ -49,9 +56,9 @@ contract Fund is IFund, Operator, Initializable {
 
     struct FundInfo {
         uint256 amount;
-        bool isClaimed;
+        uint256 claimedAmount;
     }
-    uint256 constant EXCHANGE_RATE = 10 ** 6;
+    uint256 constant EXCHANGE_RATE = 1e18;
 
     Period public fundPeriod;
     uint256 public releaseTime;
@@ -70,16 +77,7 @@ contract Fund is IFund, Operator, Initializable {
     // expressed to six decimal places. e.g. exchange_rate 1 means 0.000001
     mapping (address => FundInfo) public userFundInfo;
 
-    uint32 public totalBacker;
     uint256 public totalFundedAmount;
-
-    modifier onPeriod () {
-        require(
-            fundPeriod.startTime <= block.timestamp && block.timestamp < fundPeriod.periodFinish,
-            "not on funding period"
-        );
-        _;
-    }
 
     function initialize (
         bytes memory args
@@ -122,12 +120,26 @@ contract Fund is IFund, Operator, Initializable {
     ) public onlyOwner {
         // targetAmount is dollar (not sale token amount)
         targetAmount = _targetAmount;
-        exchangeRate = _exchangeRate;
         userMinFundingAmount = _userMinFundingAmount;
         userMaxFundingAmount = _userMaxFundingAmount;
+        exchangeRate = getDecimalAppliedExchangeRate(_exchangeRate);
 
         uint256 totalSaleTokenAmount = targetAmount.mul(exchangeRate).div(EXCHANGE_RATE);
         saleToken.safeTransferFrom(_senderAddress, address(this), totalSaleTokenAmount);
+    }
+
+    function getDecimalAppliedExchangeRate(uint256 _exchangeRate) internal view returns (uint256) {
+        uint8 exchangeTokenDecimals = ERC20(address(exchangeToken)).decimals();
+        uint8 saleTokenDecimals = ERC20(address(saleToken)).decimals();
+        uint256 actualExchangeRate;
+
+        if (exchangeTokenDecimals <= saleTokenDecimals) {
+            actualExchangeRate = _exchangeRate.mul(10 ** saleTokenDecimals.sub(exchangeTokenDecimals));
+        } else {
+            actualExchangeRate = _exchangeRate.div(10 ** exchangeTokenDecimals.sub(saleTokenDecimals));
+        }
+
+        return actualExchangeRate;
     }
 
     function setPeriod (uint256 _fundStartTime, uint256 _fundingPeriod, uint256 _releaseTime)
@@ -158,58 +170,65 @@ contract Fund is IFund, Operator, Initializable {
     }
 
     function getClaimedAmount (address user) public view returns (uint256) {
-        if (userFundInfo[user].isClaimed == false) {
+        if (userFundInfo[user].claimedAmount == 0) {
             return 0;
         }
-        uint256 amount = userFundInfo[user].amount;
-        return amount.mul(exchangeRate).div(EXCHANGE_RATE);
+        return userFundInfo[user].claimedAmount.mul(exchangeRate).div(EXCHANGE_RATE);
     }
 
-    function fund (uint256 amount) public override onPeriod {
+    function fund (uint256 amount) public override {
         // Todo: Whitelist
-        require(targetAmount > 0, "sale token is not set");
-        require(userFundInfo[_msgSender()].amount == 0, "already funded");
-        require(amount >= userMinFundingAmount, "under min allocation");
-        require(amount <= userMaxFundingAmount, "exceed max allocation");
-        require(stakeContract.isSatisfied(_msgSender()), "dissatisfy stake conditions");
-        require(totalFundedAmount <= targetAmount, "funding has been finished");
-        uint256 availableAmount = _getAvailableAmount(amount);
+        require(
+            fundPeriod.startTime <= block.timestamp && block.timestamp < fundPeriod.periodFinish,
+            "Fund: not on funding period"
+        );
+        require(targetAmount > 0, "Fund: sale token is not set");
+        require(totalFundedAmount <= targetAmount, "Fund: funding has been finished");
+        require(amount >= userMinFundingAmount, "Fund: under min allocation");
+        require(stakeContract.isSatisfied(_msgSender()), "Fund: dissatisfy stake conditions");
+
 
         // if lock up period is exist, do not swap.
-        _fund(availableAmount);
+        _fund(amount);
 
         if (block.timestamp >= releaseTime) {
             _claim();
         }
     }
-    function _getAvailableAmount (uint256 amount) private view returns (uint256) {
-        uint256 remainAmount = targetAmount.sub(totalFundedAmount);
-        return remainAmount >= amount ? amount : remainAmount;
-}
-    function _fund (uint256 amount) private {
-        // Todo: token fallback
-        userFundInfo[_msgSender()].amount = userFundInfo[_msgSender()].amount.add(amount);
-        exchangeToken.safeTransferFrom(_msgSender(), address(this), amount);
-        exchangeToken.safeTransfer(treasuryAddress, amount);
+    function _getAvailableAmount (uint256 amount) internal view returns (uint256) {
+        return Math.min(amount, targetAmount.sub(totalFundedAmount));
+    }
 
-        totalFundedAmount = totalFundedAmount.add(amount);
-        totalBacker = uint32(totalBacker.add(1));
+    function _fund (uint256 amount) internal {
+        FundInfo memory _info = userFundInfo[_msgSender()];
+        require(_info.amount.add(amount) <= userMaxFundingAmount, "Fund: exceed amount");
 
-        emit Funded(_msgSender(), amount);
+        uint256 availableAmount = _getAvailableAmount(amount);
+        _info.amount = _info.amount.add(availableAmount);
+        totalFundedAmount = totalFundedAmount.add(availableAmount);
+        userFundInfo[_msgSender()] = _info;
+
+        exchangeToken.safeTransferFrom(_msgSender(), treasuryAddress, availableAmount);
+
+        emit Funded(_msgSender(), address(saleToken), availableAmount, exchangeRate);
     }
     function claim () public {
-        require(releaseTime <= block.timestamp, "token is not released");
-        require(userFundInfo[_msgSender()].isClaimed == false, "already claimed");
+        require(releaseTime <= block.timestamp, "Fund: token is not released");
+
         _claim();
     }
 
-    function _claim () private {
-        uint256 amount = userFundInfo[_msgSender()].amount;
-        userFundInfo[_msgSender()].isClaimed = true;
+    function _claim () internal {
+        FundInfo memory _info = userFundInfo[_msgSender()];
+        require(_info.amount.sub(_info.claimedAmount) > 0, "Fund: already claimed");
 
-        uint256 swapAmount = amount.mul(exchangeRate).div(EXCHANGE_RATE);
+        uint256 claimAmount = _info.amount.sub(_info.claimedAmount);
+        uint256 swapAmount = claimAmount.mul(exchangeRate).div(EXCHANGE_RATE);
+        _info.claimedAmount = _info.claimedAmount.add(claimAmount);
+        userFundInfo[_msgSender()] = _info;
+
         saleToken.safeTransfer(_msgSender(), swapAmount);
 
-        emit Claimed(_msgSender(), swapAmount);
+        emit Claimed(_msgSender(), address(saleToken), swapAmount, exchangeRate);
     }
 }
