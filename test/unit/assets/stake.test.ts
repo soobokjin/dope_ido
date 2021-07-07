@@ -1,23 +1,15 @@
-import {ethers, network} from "hardhat";
+import {ethers} from "hardhat";
 import chai from "chai";
 import {solidity} from "ethereum-waffle";
-import {BigNumber, Contract, ContractFactory} from "ethers";
+import {Contract, ContractFactory} from "ethers";
 import {SignerWithAddress} from "@nomiclabs/hardhat-ethers/dist/src/signer-with-address";
-import {increaseTime, latestBlocktime} from "../../utils";
 
 chai.use(solidity);
 const {expect} = chai;
 
 
 describe("Stake", () => {
-    const MINUTES: number = 60;
-    const HOUR: number = MINUTES * 60;
-    const DAY: number = HOUR * 24;
-
     const saleTokenMintAmount: number = 10 ** 10;
-    let minLockUpAmount: number = 10000;
-    let requiredStakeAmount: number = 100000;
-    let requiredRetentionPeriod: number = 4 * DAY;
     let stakeOwner: SignerWithAddress;
 
     let stake: ContractFactory;
@@ -25,6 +17,7 @@ describe("Stake", () => {
 
     let stakeContract: Contract;
     let stakeTokenContract: Contract;
+    let unregisteredStakeTokenContract: Contract;
 
     before("Setup accounts", async () => {
         [stakeOwner] = await ethers.getSigners();
@@ -37,216 +30,76 @@ describe("Stake", () => {
             "STK",
             saleTokenMintAmount
         );
+
+        unregisteredStakeTokenContract = await stakeToken.connect(stakeOwner).deploy(
+            "unregisterdStakeToken",
+            "NON",
+            saleTokenMintAmount
+        );
     });
 
     beforeEach("fetch stake contract", async () => {
-        let defaultTimeBefore: number = DAY
-        let args;
         stake = await ethers.getContractFactory('Stake');
-        stakeContract = await stake.connect(stakeOwner).deploy(
-
-        );
-        args = await stakeContract.initPayload(
-            stakeTokenContract.address,
-            minLockUpAmount,
-            requiredStakeAmount,
-            requiredRetentionPeriod,
-        );
-
+        stakeContract = await stake.connect(stakeOwner).deploy();
         // set on stake period
-        await stakeContract.connect(stakeOwner).initialize(args);
-        await stakeContract.connect(stakeOwner).setPeriod(
-            await latestBlocktime() - defaultTimeBefore,
-            defaultTimeBefore + DAY
-        );
+        await stakeContract.connect(stakeOwner).initialize();
+        await stakeContract.connect(stakeOwner).setStakeToken(stakeTokenContract.address);
     });
 
     // ================================== Stake ==================================
-    it("when try to stake before stake period, should revert", async () => {
-        let stakeAmount: number = 100000;
-        let timeAfter: number = HOUR;
-        await stakeContract.connect(stakeOwner).setPeriod(
-            await latestBlocktime() + timeAfter,
-            timeAfter
-        );
-        await stakeTokenContract.connect(stakeOwner).approve(stakeContract.address, stakeAmount);
-
-        await expect(stakeContract.connect(stakeOwner).stake(stakeAmount)).to.be.revertedWith(
-            "not stake period"
-        );
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(0);
-        expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(saleTokenMintAmount);
-        expect(await stakeTokenContract.balanceOf(stakeContract.address)).to.eq(0);
+    it("stake with un registered stake token should revert", async () => {
+        await expect(
+            stakeContract.connect(stakeOwner).stake(10000, unregisteredStakeTokenContract.address)
+        ).to.be.revertedWith("Stake: invalid stake token");
     });
 
-    it("when try to stake after end stake period, should revert", async () => {
-        let stakeAmount: number = 100000;
-        let timeBefore: number = HOUR;
-        await stakeContract.connect(stakeOwner).setPeriod(
-            await latestBlocktime() - timeBefore,
-            timeBefore - 1
-        );
-        await stakeTokenContract.connect(stakeOwner).approve(stakeContract.address, stakeAmount);
-
-        await expect(stakeContract.connect(stakeOwner).stake(stakeAmount)).to.be.revertedWith(
-            "not stake period"
-        );
-
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(0);
-        expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(saleTokenMintAmount);
-        expect(await stakeTokenContract.balanceOf(stakeContract.address)).to.eq(0);
-    });
-
-    it("when try to stake more than allowance amount, should revert", async () => {
+    it("stake with valid amount", async () => {
         let stakeAmount: number = 100000;
         await stakeTokenContract.connect(stakeOwner).approve(stakeContract.address, stakeAmount);
 
-        await expect(stakeContract.connect(stakeOwner).stake(stakeAmount + 1)).to.be.revertedWith(
-            "insufficient allowance"
-        );
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(0);
-        expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(saleTokenMintAmount);
-        expect(await stakeTokenContract.balanceOf(stakeContract.address)).to.eq(0);
-    });
+        await stakeContract.connect(stakeOwner).stake(stakeAmount, stakeTokenContract.address);
 
-    it("when stake under min lockup amount, should revert", async () => {
-        let stakeAmount: number = minLockUpAmount - 1;
-        await stakeTokenContract.connect(stakeOwner).approve(stakeContract.address, stakeAmount);
-
-        await expect(stakeContract.connect(stakeOwner).stake(stakeAmount)).to.be.revertedWith(
-            "insufficient amount"
-        );
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(0);
-        expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(saleTokenMintAmount);
-        expect(await stakeTokenContract.balanceOf(stakeContract.address)).to.eq(0);
-    });
-
-    it("success with valid stake amount", async () => {
-        let stakeAmount: number = requiredStakeAmount + 1;
-        await stakeTokenContract.connect(stakeOwner).increaseAllowance(stakeContract.address, stakeAmount);
-
-        await stakeContract.connect(stakeOwner).stake(stakeAmount);
-
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(stakeAmount);
+        expect(
+            await stakeContract.getCurrentStakeAmount(stakeOwner.address, stakeTokenContract.address)
+        ).to.eq(stakeAmount);
         expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(saleTokenMintAmount - stakeAmount);
         expect(await stakeTokenContract.balanceOf(stakeContract.address)).to.eq(stakeAmount);
     });
 
-    // ================================== isSatisfied ==================================
-    it("success with multiple staking", async () => {
-        // GIVEN:
-        let stakeAmount: number = requiredStakeAmount;
-        await stakeContract.connect(stakeOwner).setPeriod(await latestBlocktime() - 1, 5 * DAY);
+    it("unstake with valid amount", async () => {
+        let stakeAmount: number = 100000;
+        await stakeTokenContract.connect(stakeOwner).approve(stakeContract.address, stakeAmount);
+        await stakeContract.connect(stakeOwner).stake(stakeAmount, stakeTokenContract.address);
 
-        // WHEN:
-        await stakeTokenContract.connect(stakeOwner).increaseAllowance(stakeContract.address, stakeAmount);
-        await stakeContract.connect(stakeOwner).stake(stakeAmount);
-        await increaseTime(2 * DAY);
-        expect(Boolean(await stakeContract.isSatisfied(stakeOwner.address))).to.eq(false);
+        await stakeContract.connect(stakeOwner).unStake(stakeAmount, stakeTokenContract.address);
 
-        let additionalLockup: number = minLockUpAmount
-        await stakeTokenContract.connect(stakeOwner).increaseAllowance(stakeContract.address, additionalLockup);
-        await stakeContract.connect(stakeOwner).stake(additionalLockup);
-        await increaseTime(4 * DAY);
-
-        // THEN:
-        expect(Boolean(await stakeContract.isSatisfied(stakeOwner.address))).to.eq(true);
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(
-            stakeAmount + additionalLockup
-        );
+        expect(
+            await stakeContract.getCurrentStakeAmount(stakeOwner.address, stakeTokenContract.address)
+        ).to.eq(0);
+        expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(saleTokenMintAmount);
+        expect(await stakeTokenContract.balanceOf(stakeContract.address)).to.eq(0);
     });
 
-    it("when unstake under required amount should not satisfy", async () => {
-        // GIVEN:
-        let stakeAmount: number = requiredStakeAmount;
-        await stakeContract.connect(stakeOwner).setPeriod(await latestBlocktime() - 1, 5 * DAY);
-
-        // WHEN:
-        await stakeTokenContract.connect(stakeOwner).increaseAllowance(stakeContract.address, stakeAmount);
-        await stakeContract.connect(stakeOwner).stake(stakeAmount);
-        await increaseTime(3 * DAY);
-
-        let unLockupAmount: number = 1
-        await stakeContract.connect(stakeOwner).unStake(unLockupAmount);
-        await increaseTime(3 * DAY);
-
-        // THEN:
-        expect(Boolean(await stakeContract.isSatisfied(stakeOwner.address))).to.eq(false);
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(
-            stakeAmount - unLockupAmount
-        );
-    });
-
-    it("when do not stake, not satisfy", async () => {
-        // GIVEN:
-        await stakeContract.connect(stakeOwner).setPeriod(await latestBlocktime() - 1, 5 * DAY);
-
-        // WHEN:
-        await increaseTime(6 * DAY);
-
-        // THEN:
-        expect(Boolean(await stakeContract.isSatisfied(stakeOwner.address))).to.eq(false);
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(0);
-    });
-
-    // ================================== unStake ==================================
-    it("when try to unstake more then staked amount, should revert ", async () => {
-        let stakeAmount: number = requiredStakeAmount;
-        let unStakeAmount: number = stakeAmount + 1;
-
-        await stakeTokenContract.connect(stakeOwner).increaseAllowance(stakeContract.address, stakeAmount);
-        await stakeContract.connect(stakeOwner).stake(stakeAmount);
-
-        await expect(stakeContract.connect(stakeOwner).unStake(unStakeAmount)).to.be.revertedWith(
-            "invalid amount. stakedAmount < amount"
+    it("validate merkle proof", async () => {
+        /*
+            leafs:
+                0xC7905463C85C6398B4C146D5AcB02623Cda60E24
+                0xeaE7E225C6A0733f96C3b0691d61a3B62B8cB850
+                0x96d80c5189294e6e12Becb69f16591cd5cfc057C
+                0x96d80c5189294e6e12Becb69f16591cd5cfc057C
+         */
+        let address1: string = '0xC7905463C85C6398B4C146D5AcB02623Cda60E24';
+        let merkleProof = [
+            '0x4c5031fa63aa4cd4aab2ce752b8f2450267997e0bd647933b036a04ebff94010',
+            '0x19fa3742510ad34c636f1b090f0125197213fa56d9d6b411ef582a6462f40efa'
+        ];
+        let root: string = '0xb9bf33515673eecd7e594c529c12dae575bd20acec93c21cdd624be099cc7c42';
+        await stakeContract.connect(stakeOwner).registerSaleTokenWhiteList(
+            stakeTokenContract.address, root
         )
-    });
 
-    it("when try to unstake without stake, should revert", async () => {
-        let unStakeAmount: number = 1;
-
-        await expect(stakeContract.connect(stakeOwner).unStake(unStakeAmount)).to.be.revertedWith(
-            "stake amount is 0"
-        )
-    });
-
-    it("success unstaking with valid amount", async () => {
-        let stakeAmount: number = requiredStakeAmount;
-        let unStakeAmount: number = stakeAmount;
-
-        await stakeTokenContract.connect(stakeOwner).increaseAllowance(stakeContract.address, stakeAmount);
-        await stakeContract.connect(stakeOwner).stake(stakeAmount);
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(stakeAmount);
-        expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(saleTokenMintAmount - stakeAmount);
-        expect(await stakeTokenContract.balanceOf(stakeContract.address)).to.eq(stakeAmount);
-
-        await stakeContract.connect(stakeOwner).unStake(unStakeAmount);
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(0);
-        expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(saleTokenMintAmount);
-        expect(await stakeTokenContract.balanceOf(stakeContract.address)).to.eq(0);
-    });
-
-    it("success multiple unstake", async () => {
-        let stakeAmount: number = requiredStakeAmount;
-        let firstUnStakeAmount: number = 10000;
-        let secondUnStakeAmount: number = 20000;
-
-        await stakeTokenContract.connect(stakeOwner).increaseAllowance(stakeContract.address, stakeAmount);
-        await stakeContract.connect(stakeOwner).stake(stakeAmount);
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(stakeAmount);
-        expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(saleTokenMintAmount - stakeAmount);
-        expect(await stakeTokenContract.balanceOf(stakeContract.address)).to.eq(stakeAmount);
-
-        await stakeContract.connect(stakeOwner).unStake(firstUnStakeAmount);
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(
-            stakeAmount - firstUnStakeAmount
-        );
-        await stakeContract.connect(stakeOwner).unStake(secondUnStakeAmount);
-        expect(await stakeContract.getCurrentStakeAmount(stakeOwner.address)).to.eq(
-            stakeAmount - firstUnStakeAmount - secondUnStakeAmount
-        );
-        expect(await stakeTokenContract.balanceOf(stakeOwner.address)).to.eq(
-            saleTokenMintAmount - (stakeAmount - firstUnStakeAmount - secondUnStakeAmount)
-        );
+        expect(
+            await stakeContract.isWhiteListed(address1, stakeTokenContract.address, merkleProof, 0)
+        ).to.be.eq(true);
     });
 });
