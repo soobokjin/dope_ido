@@ -7,7 +7,7 @@ contract MerkleProof {
     using SafeMath for uint32;
 
     function verify (
-        bytes32[] memory _proof, bytes32 _root, bytes32 _leaf, uint32 _index
+        bytes32 _leaf, bytes32 _root,  bytes32[] memory _proof, uint32 _index
     )
         internal pure returns (bool)
     {
