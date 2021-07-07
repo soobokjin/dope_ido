@@ -14,10 +14,7 @@ import "hardhat/console.sol";
 
 
 interface IStake {
-    function initialize (bytes memory args) external;
-    function initPayload (
-        address _stakeTokenAddress
-    ) external pure returns (bytes memory);
+    function initialize () external;
     function isWhiteListed (
         address _user,
         address _saleToken,
@@ -73,11 +70,26 @@ contract Stake is IStake, Operator, Initializable {
         isStakeToken[_stakeTokenAddress] = true;
     }
 
+    function registerSaleTokenWhiteList(
+        address _saleToken,
+        bytes32 _saleTokenMerkleRootWhiteList
+    ) public onlyOwner {
+        saleTokenMerkleRootWhiteList[_saleToken] = _saleTokenMerkleRootWhiteList;
+    }
+
+    function IsRegisteredStakeToken (address _stakeTokenAddress) public view returns (bool) {
+        return isStakeToken[_stakeTokenAddress];
+    }
+
+    function getSaleTokenMerkleRootWhiteList (address _stakeTokenAddress) public view returns (bytes32) {
+        return saleTokenMerkleRootWhiteList[_stakeTokenAddress];
+    }
+
     function getCurrentStakeAmount (
         address _user,
         address _stakeTokenAddress
     ) public view  isRegistered(_stakeTokenAddress) returns (uint256) {
-        StakeInfo memory userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_user];
+        StakeInfo storage userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_user];
         uint256 length = userStakeInfo.stakeChangedBlockTimeList.length;
         if (length == 0) {
             return 0;
@@ -95,21 +107,13 @@ contract Stake is IStake, Operator, Initializable {
         return userStakeInfoByStakeToken[_stakeTokenAddress][_user].stakeAmountByBlockTime[_blockTime];
     }
 
-    function registerSaleTokenWhiteList(
-        address _saleToken,
-        bytes32 _saleTokenMerkleRootWhiteList
-    ) public onlyOwner {
-        saleTokenMerkleRootWhiteList[_saleToken] = _saleTokenMerkleRootWhiteList;
-    }
-
     function stake (
         uint256 _amount,
         address _stakeTokenAddress
     ) public isRegistered(_stakeTokenAddress) {
         IERC20(_stakeTokenAddress).safeTransferFrom(_msgSender(), address(this), _amount);
-        StakeInfo memory userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()];
+        StakeInfo storage userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()];
         _increaseStakeInfo(userStakeInfo, _amount);
-        userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()] = userStakeInfo;
 
         emit Staked(
             _msgSender(),
@@ -120,21 +124,21 @@ contract Stake is IStake, Operator, Initializable {
         );
     }
 
-    function _increaseStakeInfo(StakeInfo memory _userStakeInfo, uint256 _amount) private {
-        uint256 historyLength = _userStakeInfo.stakeAmountByBlockTime.length;
+    function _increaseStakeInfo(StakeInfo storage _userStakeInfo, uint256 _amount) private {
+        uint256 historyLength = _userStakeInfo.stakeChangedBlockTimeList.length;
 
         _userStakeInfo.stakeChangedBlockTimeList.push(block.timestamp);
         if (historyLength == 0) {
             _userStakeInfo.stakeAmountByBlockTime[block.timestamp] = _amount;
         }
         else {
-            uint256 stakedAmount = _getUserStakeAmount(userStakeInfo, historyLength);
+            uint256 stakedAmount = _getUserStakeAmount(_userStakeInfo, historyLength);
             _userStakeInfo.stakeAmountByBlockTime[block.timestamp] = stakedAmount.add(_amount);
         }
     }
 
     function unStake (uint256 _amount, address _stakeTokenAddress) public isRegistered(_stakeTokenAddress) {
-        StakeInfo memory userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()];
+        StakeInfo storage userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()];
         uint256 historyLength = userStakeInfo.stakeChangedBlockTimeList.length;
         require(historyLength > 0, "Stake: stake amount is 0");
         uint256 stakedAmount = _getUserStakeAmount(userStakeInfo, historyLength);
@@ -142,7 +146,6 @@ contract Stake is IStake, Operator, Initializable {
 
         userStakeInfo.stakeChangedBlockTimeList.push(block.timestamp);
         userStakeInfo.stakeAmountByBlockTime[block.timestamp] = stakedAmount.sub(_amount);
-        userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()] = userStakeInfo;
 
         IERC20(_stakeTokenAddress).safeTransfer(_msgSender(), _amount);
 
@@ -156,7 +159,7 @@ contract Stake is IStake, Operator, Initializable {
     }
 
     function _getUserStakeAmount(
-        StakeInfo memory _userStakeInfo,
+        StakeInfo storage _userStakeInfo,
         uint256 _blockTimeListLength
     ) internal view returns (uint256) {
         uint256 lastChangedBlockTime = _userStakeInfo.stakeChangedBlockTimeList[_blockTimeListLength.sub(1)];
@@ -170,10 +173,12 @@ contract Stake is IStake, Operator, Initializable {
         uint32 _index
     ) external view override returns (bool) {
         require(saleTokenMerkleRootWhiteList[_saleToken] != 0, "Stake: whitelist not set");
+        bytes32 leaf = keccak256(abi.encodePacked(_user));
+        bytes32 root = saleTokenMerkleRootWhiteList[_saleToken];
 
         return MerkleProof.verify(
-            keccak256(abi.encodePacked(_user)),
-            saleTokenMerkleRootWhiteList[_saleToken],
+            leaf,
+            root,
             _proof,
             _index
         );

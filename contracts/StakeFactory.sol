@@ -17,13 +17,7 @@ contract StakeFactory is Ownable {
 
     constructor() {
         Stake stake = new Stake();
-        bytes memory payload = stake.initPayload(
-            address(0x0),
-            0,
-            0,
-            0
-        );
-        stake.initialize(payload);
+        stake.initialize();
         implementation = address(stake);
     }
 
@@ -32,21 +26,12 @@ contract StakeFactory is Ownable {
     }
 
     function createStake(
-        // stake
-        address _stakeTokenAddress,
-        uint256 _minLockupAmount,
-        uint256 _requiredStakeAmount,
-        uint32 _requiredRetentionPeriod,
-        uint256 _startTime,
-        uint256 _period
+        address _stakeTokenAddress
     ) public onlyOwner returns (address) {
         address instance = Clones.clone(implementation);
         Stake stakeInstance = Stake(instance);
-        bytes memory payload = stakeInstance.initPayload(
-            _stakeTokenAddress, _minLockupAmount, _requiredStakeAmount, _requiredRetentionPeriod
-        );
-        stakeInstance.initialize(payload);
-        stakeInstance.setPeriod(_startTime, _period);
+        stakeInstance.initialize();
+        stakeInstance.setStakeToken(_stakeTokenAddress);
         stakeInstance.transferOwnership(msg.sender);
 
         stakeList.push(instance);

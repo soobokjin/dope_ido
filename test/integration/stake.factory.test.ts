@@ -46,20 +46,15 @@ describe("DOPE", () => {
         stakeFactory = await ethers.getContractFactory('Stake');
 
         stakeFactoryContract = await stakeFactoryFactory.connect(dopeOwner).deploy();
-        await stakeFactoryContract.connect(dopeOwner).createStake(
-            dopeTokenContract.address,
-            10000,
-            10000,
-            10000,
-            0,
-            0
-        );
+        await stakeFactoryContract.connect(dopeOwner).createStake(dopeTokenContract.address);
         stakeImplementationContract = stakeFactory.attach(await stakeFactoryContract.implementation());
     });
 
-    // Todo: supplement tests
+    // TODO: supplement tests
     it("", async () => {
         let created_address: string = await stakeFactoryContract.getStakeAddressOf(0);
         stakeProxyContract = stakeFactory.attach(created_address);
+
+        expect(await stakeProxyContract.IsRegisteredStakeToken(dopeTokenContract.address)).to.eq(true);
     });
 });
