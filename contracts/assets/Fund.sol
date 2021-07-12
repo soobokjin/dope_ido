@@ -24,6 +24,18 @@ interface IFund {
         address _treasuryAddress
     ) external pure returns (bytes memory);
     function fund (uint256 _amount, bytes32[] memory _proof, uint32 _index) external;
+    event Funded(
+        address indexed user,
+        address indexed token,
+        uint256 amount,
+        uint256 exchangeRate
+    );
+    event Claimed(
+        address indexed user,
+        address indexed token,
+        uint256 amount,
+        uint256 exchangeRate
+    );
 }
 
 

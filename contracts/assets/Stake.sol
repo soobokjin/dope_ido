@@ -15,12 +15,20 @@ import "hardhat/console.sol";
 
 interface IStake {
     function initialize () external;
-    function isWhiteListed (
-        address _user,
-        address _saleToken,
-        bytes32[] memory _proof,
-        uint32 _index
-    ) external returns (bool);
+    event Staked(
+        address indexed user,
+        address indexed stakeTokenAddress,
+        uint256 stakeAmount,
+        uint256 totalStakedAmount,
+        uint256 blockTime
+    );
+    event UnStaked(
+        address indexed user,
+        address indexed stakeTokenAddress,
+        uint256 unStakeAmount,
+        uint256 totalStakedAmount,
+        uint256 blockTime
+    );
 }
 
 
