@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity >=0.8.0 <0.9.0;
 
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import {Math} from '@openzeppelin/contracts/utils/math/Math.sol';
@@ -11,8 +11,6 @@ import {IStake} from "./Stake.sol";
 import {Operator} from '../access/Operator.sol';
 
 import "hardhat/console.sol";
-
-// contract 에서는 erc token 의 decimals 에 대해서 고려하지 않는다. (호출자 책임)
 
 
 interface IFund {

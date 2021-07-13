@@ -2,7 +2,7 @@
 // solidity coveragy
 // gas-reporter
 
-pragma solidity ^0.8.0;
+pragma solidity >=0.8.0 <0.9.0;
 
 import {Fund} from  './assets/Fund.sol';
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
