@@ -31,7 +31,7 @@ contract StakeFactory is Ownable {
         address instance = Clones.clone(implementation);
         Stake stakeInstance = Stake(instance);
         stakeInstance.initialize();
-        stakeInstance.setStakeToken(_stakeTokenAddress);
+        stakeInstance.registerStakeToken(_stakeTokenAddress);
         stakeInstance.transferOwnership(msg.sender);
 
         stakeList.push(instance);

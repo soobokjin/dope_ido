@@ -57,19 +57,38 @@ contract Stake is IStake, Operator, Initializable {
         uint256 blockTime
     );
 
+    event StakeTokenRegistered(
+        address stakeTokenAddress
+    );
+
+    event StakeTokenActiveChanged(
+        address stakeTokenAddress,
+        bool isActive
+    );
+
     struct StakeInfo {
         uint[] stakeChangedBlockTimeList;
         mapping(uint256 => uint256) stakeAmountByBlockTime;
+    }
+
+    struct StakeTokenInfo {
+        bool isRegistered;
+        bool isActive;
     }
 
     // TODO: mapping key should be sale token and struct user info
     // [{a, a}] , storage 접근 X)
     // prettier, prettier-plugin-solidity
     mapping(address => mapping(address => StakeInfo)) userStakeInfoByStakeToken;
-    mapping(address => bool) isStakeToken;
+    mapping(address => StakeTokenInfo) stakeTokenInfo;
 
     modifier isRegistered (address _stakeTokenAddress) {
-        require(isStakeToken[_stakeTokenAddress] == true, "Stake: invalid stake token");
+        require(stakeTokenInfo[_stakeTokenAddress].isRegistered == true, "Stake: stake token not registered");
+        _;
+    }
+
+    modifier isActivated (address _stakeTokenAddress) {
+        require(stakeTokenInfo[_stakeTokenAddress].isActive == true, "Stake: stake token not activated");
         _;
     }
 
@@ -77,13 +96,33 @@ contract Stake is IStake, Operator, Initializable {
         setRole(_msgSender(), _msgSender());
     }
 
-    function setStakeToken (address _stakeTokenAddress) public onlyOwner {
-        // TODO: 디리스팅 + withdraw 가능하게
-        isStakeToken[_stakeTokenAddress] = true;
+    function registerStakeToken(address _stakeTokenAddress) public onlyOwner {
+        bool isRegistered = true;
+        bool isActive = true;
+        stakeTokenInfo[_stakeTokenAddress] = StakeTokenInfo(isRegistered, isActive);
+
+        emit StakeTokenRegistered(_stakeTokenAddress);
+        emit StakeTokenActiveChanged(_stakeTokenAddress, isActive);
     }
 
-    function IsRegisteredStakeToken (address _stakeTokenAddress) public view returns (bool) {
-        return isStakeToken[_stakeTokenAddress];
+    function changeStakeTokenActivation(
+        address _stakeTokenAddress,
+        bool _active
+    ) isRegistered(_stakeTokenAddress) public onlyOwner {
+        StakeTokenInfo memory tokenInfo = stakeTokenInfo[_stakeTokenAddress];
+        tokenInfo.isActive = _active;
+
+        stakeTokenInfo[_stakeTokenAddress] = tokenInfo;
+
+        emit StakeTokenActiveChanged(_stakeTokenAddress, _active);
+    }
+
+    function IsStakeTokenRegistered (address _stakeTokenAddress) public view returns (bool) {
+        return stakeTokenInfo[_stakeTokenAddress].isRegistered;
+    }
+
+    function IsStakeTokenActivated (address _stakeTokenAddress) public view returns (bool) {
+        return stakeTokenInfo[_stakeTokenAddress].isActive;
     }
 
     function getCurrentStakeAmount (
@@ -111,7 +150,7 @@ contract Stake is IStake, Operator, Initializable {
     function stake (
         address _stakeTokenAddress,
         uint256 _amount
-    ) public isRegistered(_stakeTokenAddress) {
+    ) public isRegistered(_stakeTokenAddress) isActivated(_stakeTokenAddress) {
         IERC20(_stakeTokenAddress).safeTransferFrom(_msgSender(), address(this), _amount);
         StakeInfo storage userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()];
         _increaseStakeInfo(userStakeInfo, _amount);
