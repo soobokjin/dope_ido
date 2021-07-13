@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// TODO: 0.9.0
 pragma solidity ^0.8.0;
 
 import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
@@ -12,6 +13,8 @@ import {MerkleProof} from '../utils/MerkleProof.sol';
 
 import "hardhat/console.sol";
 
+
+// TODO: register
 
 interface IStake {
     function initialize () external;
@@ -60,10 +63,10 @@ contract Stake is IStake, Operator, Initializable {
     }
 
     // TODO: mapping key should be sale token and struct user info
+    // [{a, a}] , storage 접근 X)
+    // prettier, prettier-plugin-solidity
     mapping(address => mapping(address => StakeInfo)) userStakeInfoByStakeToken;
-    mapping(address => bytes32) saleTokenMerkleRootWhiteList;
     mapping(address => bool) isStakeToken;
-
 
     modifier isRegistered (address _stakeTokenAddress) {
         require(isStakeToken[_stakeTokenAddress] == true, "Stake: invalid stake token");
@@ -75,22 +78,12 @@ contract Stake is IStake, Operator, Initializable {
     }
 
     function setStakeToken (address _stakeTokenAddress) public onlyOwner {
+        // TODO: 디리스팅 + withdraw 가능하게
         isStakeToken[_stakeTokenAddress] = true;
-    }
-
-    function registerSaleTokenWhiteList(
-        address _saleToken,
-        bytes32 _saleTokenMerkleRootWhiteList
-    ) public onlyOwner {
-        saleTokenMerkleRootWhiteList[_saleToken] = _saleTokenMerkleRootWhiteList;
     }
 
     function IsRegisteredStakeToken (address _stakeTokenAddress) public view returns (bool) {
         return isStakeToken[_stakeTokenAddress];
-    }
-
-    function getSaleTokenMerkleRootWhiteList (address _stakeTokenAddress) public view returns (bytes32) {
-        return saleTokenMerkleRootWhiteList[_stakeTokenAddress];
     }
 
     function getCurrentStakeAmount (
@@ -116,8 +109,8 @@ contract Stake is IStake, Operator, Initializable {
     }
 
     function stake (
-        uint256 _amount,
-        address _stakeTokenAddress
+        address _stakeTokenAddress,
+        uint256 _amount
     ) public isRegistered(_stakeTokenAddress) {
         IERC20(_stakeTokenAddress).safeTransferFrom(_msgSender(), address(this), _amount);
         StakeInfo storage userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()];
@@ -145,7 +138,7 @@ contract Stake is IStake, Operator, Initializable {
         }
     }
 
-    function unStake (uint256 _amount, address _stakeTokenAddress) public isRegistered(_stakeTokenAddress) {
+    function unStake (address _stakeTokenAddress, uint256 _amount) public isRegistered(_stakeTokenAddress) {
         StakeInfo storage userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()];
         uint256 historyLength = userStakeInfo.stakeChangedBlockTimeList.length;
         require(historyLength > 0, "Stake: stake amount is 0");
@@ -172,23 +165,5 @@ contract Stake is IStake, Operator, Initializable {
     ) internal view returns (uint256) {
         uint256 lastChangedBlockTime = _userStakeInfo.stakeChangedBlockTimeList[_blockTimeListLength.sub(1)];
         return _userStakeInfo.stakeAmountByBlockTime[lastChangedBlockTime];
-    }
-
-    function isWhiteListed (
-        address _user,
-        address _saleToken,
-        bytes32[] memory _proof,
-        uint32 _index
-    ) external view override returns (bool) {
-        require(saleTokenMerkleRootWhiteList[_saleToken] != 0, "Stake: whitelist not set");
-        bytes32 leaf = keccak256(abi.encodePacked(_user));
-        bytes32 root = saleTokenMerkleRootWhiteList[_saleToken];
-
-        return MerkleProof.verify(
-            leaf,
-            root,
-            _proof,
-            _index
-        );
     }
 }

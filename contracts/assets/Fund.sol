@@ -90,6 +90,7 @@ contract Fund is IFund, Operator, Initializable {
     mapping (address => FundInfo) public userFundInfo;
 
     uint256 public totalFundedAmount;
+    bytes32 saleTokenMerkleRootWhiteList;
 
     function initialize (
         bytes memory args
@@ -121,6 +122,16 @@ contract Fund is IFund, Operator, Initializable {
             _stakeAddress,
             _treasuryAddress
         );
+    }
+
+    function registerSaleTokenWhiteList(
+        bytes32 _saleTokenMerkleRootWhiteList
+    ) public onlyOwner {
+        saleTokenMerkleRootWhiteList = _saleTokenMerkleRootWhiteList;
+    }
+
+    function getSaleTokenMerkleRootWhiteList () public view returns (bytes32) {
+        return saleTokenMerkleRootWhiteList;
     }
 
     function setSaleToken (
@@ -199,10 +210,7 @@ contract Fund is IFund, Operator, Initializable {
         require(targetAmount > 0, "Fund: sale token is not set");
         require(totalFundedAmount <= targetAmount, "Fund: funding has been finished");
         require(_amount >= userMinFundingAmount, "Fund: under min allocation");
-        require(
-            stakeContract.isWhiteListed(_msgSender(), address(saleToken), _proof, _index),
-            "Fund: dissatisfy stake conditions"
-        );
+        require(_isWhiteListed(_proof, _index), "Fund: dissatisfy stake conditions");
 
         // if lock up period is exist, do not swap.
         _fund(_amount);
@@ -246,5 +254,20 @@ contract Fund is IFund, Operator, Initializable {
         saleToken.safeTransfer(_msgSender(), swapAmount);
 
         emit Claimed(_msgSender(), address(saleToken), swapAmount, exchangeRate);
+    }
+
+    function _isWhiteListed (
+        bytes32[] memory _proof,
+        uint32 _index
+    ) internal view returns (bool) {
+        require(saleTokenMerkleRootWhiteList != 0, "Stake: whitelist not set");
+        bytes32 leaf = keccak256(abi.encodePacked(_msgSender()));
+
+        return MerkleProof.verify(
+            leaf,
+            saleTokenMerkleRootWhiteList,
+            _proof,
+            _index
+        );
     }
 }
