@@ -47,13 +47,13 @@ contract Fund is IFund, Operator, Initializable {
         uint256 exchangeRate
     );
 
-    event WithDraw(
+    event Withdraw(
         address indexed user,
         address indexed token,
         uint256 amount
     );
 
-    event WithDrawEther(
+    event WithdrawEther(
         address indexed user,
         uint256 amount
     );
@@ -260,12 +260,12 @@ contract Fund is IFund, Operator, Initializable {
 
         IERC20(_token).safeTransfer(_to, amount);
 
-        emit WithDraw(_to, _token, amount);
+        emit Withdraw(_to, _token, amount);
     }
 
     function emergencyWithdraw(address payable _to, uint256 amount) public onlyOwner {
         _to.transfer(amount);
 
-        emit WithDrawEther(_to, amount);
+        emit WithdrawEther(_to, amount);
     }
 }
