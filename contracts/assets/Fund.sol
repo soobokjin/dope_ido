@@ -9,6 +9,7 @@ import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.sol';
 import {IStake} from "./Stake.sol";
 import {Operator} from '../access/Operator.sol';
+import {MerkleProof} from '../utils/MerkleProof.sol';
 
 import "hardhat/console.sol";
 
@@ -43,20 +44,6 @@ contract Fund is IFund, Operator, Initializable {
     using SafeMath for uint32;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
-
-    event Funded(
-        address indexed user,
-        address indexed token,
-        uint256 amount,
-        uint256 exchangeRate
-    );
-
-    event Claimed(
-        address indexed user,
-        address indexed token,
-        uint256 amount,
-        uint256 exchangeRate
-    );
 
     struct Period {
         uint256 period;

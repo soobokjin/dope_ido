@@ -9,7 +9,6 @@ import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.sol';
 
 import {Operator} from '../access/Operator.sol';
-import {MerkleProof} from '../utils/MerkleProof.sol';
 
 import "hardhat/console.sol";
 
@@ -49,31 +48,6 @@ contract Stake is IStake, Operator, Initializable {
     using SafeMath for uint32;
     using SafeMath for uint8;
 
-    event Staked(
-        address indexed user,
-        address indexed stakeTokenAddress,
-        uint256 stakeAmount,
-        uint256 totalStakedAmount,
-        uint256 blockTime
-    );
-
-    event UnStaked(
-        address indexed user,
-        address indexed stakeTokenAddress,
-        uint256 unStakeAmount,
-        uint256 totalStakedAmount,
-        uint256 blockTime
-    );
-
-    event StakeTokenRegistered(
-        address stakeTokenAddress
-    );
-
-    event StakeTokenActiveChanged(
-        address stakeTokenAddress,
-        bool isActive
-    );
-
     struct StakeTokenInfo {
         bool isRegistered;
         bool isActive;
@@ -87,12 +61,12 @@ contract Stake is IStake, Operator, Initializable {
     mapping(address => StakeTokenInfo) stakeTokenInfo;
     mapping(address => mapping(address => StakeHistory[])) userStakeHistories;
 
-    modifier isRegistered (address _stakeTokenAddress) {
+    modifier registered (address _stakeTokenAddress) {
         require(stakeTokenInfo[_stakeTokenAddress].isRegistered == true, "Stake: stake token not registered");
         _;
     }
 
-    modifier isActivated (address _stakeTokenAddress) {
+    modifier activated (address _stakeTokenAddress) {
         require(stakeTokenInfo[_stakeTokenAddress].isActive == true, "Stake: stake token not activated");
         _;
     }
@@ -102,9 +76,10 @@ contract Stake is IStake, Operator, Initializable {
     }
 
     function registerStakeToken(address _stakeTokenAddress) public onlyOwner {
+        require(stakeTokenInfo[_stakeTokenAddress].isRegistered == false, "Stake: already registered");
         bool isRegistered = true;
         bool isActive = true;
-        stakeInfo[_stakeTokenAddress] = StakeTokenInfo(isRegistered, isActive);
+        stakeTokenInfo[_stakeTokenAddress] = StakeTokenInfo(isRegistered, isActive);
 
         emit StakeTokenRegistered(_stakeTokenAddress);
         emit StakeTokenActiveChanged(_stakeTokenAddress, isActive);
@@ -113,7 +88,7 @@ contract Stake is IStake, Operator, Initializable {
     function changeStakeTokenActivation(
         address _stakeTokenAddress,
         bool _active
-    ) isRegistered(_stakeTokenAddress) public onlyOwner {
+    ) registered(_stakeTokenAddress) public onlyOwner {
         StakeTokenInfo memory tokenInfo = stakeTokenInfo[_stakeTokenAddress];
         tokenInfo.isActive = _active;
 
@@ -133,7 +108,7 @@ contract Stake is IStake, Operator, Initializable {
     function getCurrentStakeAmount (
         address _stakeTokenAddress,
         address _user
-    ) public view  isRegistered(_stakeTokenAddress) returns (uint256) {
+    ) public view  registered(_stakeTokenAddress) returns (uint256) {
         StakeHistory[] memory stakeHistories = userStakeHistories[_stakeTokenAddress][_user];
         uint256 length = stakeHistories.length;
         if (length == 0) {
@@ -147,7 +122,7 @@ contract Stake is IStake, Operator, Initializable {
         address _stakeTokenAddress,
         address _user,
         uint256 _index
-    ) public view  isRegistered(_stakeTokenAddress) returns (uint256, uint256) {
+    ) public view  registered(_stakeTokenAddress) returns (uint256, uint256) {
         StakeHistory memory history = userStakeHistories[_stakeTokenAddress][_user][_index];
 
         return (history.totalStakeAmount, history.stakedBlockTime);
@@ -156,14 +131,14 @@ contract Stake is IStake, Operator, Initializable {
     function getStakeHistoryLength (
         address _stakeTokenAddress,
         address _user
-    ) public view  isRegistered(_stakeTokenAddress) returns (uint256) {
+    ) public view  registered(_stakeTokenAddress) returns (uint256) {
         return userStakeHistories[_stakeTokenAddress][_user].length;
     }
 
     function stake (
         address _stakeTokenAddress,
         uint256 _amount
-    ) public isRegistered(_stakeTokenAddress) isActivated(_stakeTokenAddress) {
+    ) public registered(_stakeTokenAddress) activated(_stakeTokenAddress) {
         IERC20(_stakeTokenAddress).safeTransferFrom(_msgSender(), address(this), _amount);
 
         uint256 increasedTotalStakedAmount = _increaseStakeInfo(_stakeTokenAddress, _amount);
@@ -193,10 +168,10 @@ contract Stake is IStake, Operator, Initializable {
         return totalStakedAmount;
     }
 
-    function unStake (address _stakeTokenAddress, uint256 _amount) public isRegistered(_stakeTokenAddress) {
+    function unStake (address _stakeTokenAddress, uint256 _amount) public registered(_stakeTokenAddress) {
         StakeHistory[] memory stakeHistories = userStakeHistories[_stakeTokenAddress][_msgSender()];
         require(stakeHistories.length > 0, "Stake: stake amount is 0");
-        totalStakedAmount = stakeHistories[stakeHistories.length.sub(1)].totalStakeAmount;
+        uint256 totalStakedAmount = stakeHistories[stakeHistories.length.sub(1)].totalStakeAmount;
         require(totalStakedAmount >= _amount, "Stake: invalid amount. stakedAmount < amount");
 
         uint256 decreasedTotalStakedAmount = totalStakedAmount.sub(_amount);
