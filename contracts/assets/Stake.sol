@@ -32,6 +32,14 @@ interface IStake {
         uint256 totalStakedAmount,
         uint256 blockTime
     );
+    event StakeTokenRegistered(
+        address stakeTokenAddress
+    );
+    event StakeTokenActiveChanged(
+        address stakeTokenAddress,
+        bool isActive
+    );
+
 }
 
 
@@ -76,11 +84,13 @@ contract Stake is IStake, Operator, Initializable {
         bool isActive;
     }
 
-    // TODO: mapping key should be sale token and struct user info
-    // [{a, a}] , storage 접근 X)
-    // prettier, prettier-plugin-solidity
-    mapping(address => mapping(address => StakeInfo)) userStakeInfoByStakeToken;
+    struct StakeHistory {
+        uint256 stakedBlockTime;
+        uint256 totalStakeAmount;
+    }
+
     mapping(address => StakeTokenInfo) stakeTokenInfo;
+    mapping(address => mapping(address => StakeHistory[])) userStakeHistories;
 
     modifier isRegistered (address _stakeTokenAddress) {
         require(stakeTokenInfo[_stakeTokenAddress].isRegistered == true, "Stake: stake token not registered");
@@ -126,25 +136,33 @@ contract Stake is IStake, Operator, Initializable {
     }
 
     function getCurrentStakeAmount (
-        address _user,
-        address _stakeTokenAddress
+        address _stakeTokenAddress,
+        address _user
     ) public view  isRegistered(_stakeTokenAddress) returns (uint256) {
-        StakeInfo storage userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_user];
-        uint256 length = userStakeInfo.stakeChangedBlockTimeList.length;
+        StakeHistory[] memory stakeHistories = userStakeHistories[_stakeTokenAddress][_msgSender()];
+        uint256 length = stakeHistories.length;
         if (length == 0) {
             return 0;
         }
 
-        uint256 lastBlockTime = userStakeInfo.stakeChangedBlockTimeList[length.sub(1)];
-        return userStakeInfo.stakeAmountByBlockTime[lastBlockTime];
+        return stakeHistories[length].totalStakeAmount;
     }
 
-    function getStakeAmountByBlockTime (
-        address _user,
+    function getStakeHistoryByIndex (
         address _stakeTokenAddress,
-        uint256 _blockTime
+        address _user,
+        uint256 _index
+    ) public view  isRegistered(_stakeTokenAddress) returns (uint256, uint256) {
+        StakeHistory memory history = userStakeHistories[_stakeTokenAddress][_user][_index];
+
+        return (history.totalStakeAmount, history.stakedBlockTime);
+    }
+
+    function getStakeHistoryLength (
+        address _stakeTokenAddress,
+        address _user
     ) public view  isRegistered(_stakeTokenAddress) returns (uint256) {
-        return userStakeInfoByStakeToken[_stakeTokenAddress][_user].stakeAmountByBlockTime[_blockTime];
+        return userStakeHistories[_stakeTokenAddress][_user].length;
     }
 
     function stake (
@@ -152,57 +170,52 @@ contract Stake is IStake, Operator, Initializable {
         uint256 _amount
     ) public isRegistered(_stakeTokenAddress) isActivated(_stakeTokenAddress) {
         IERC20(_stakeTokenAddress).safeTransferFrom(_msgSender(), address(this), _amount);
-        StakeInfo storage userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()];
-        _increaseStakeInfo(userStakeInfo, _amount);
+
+        uint256 totalStakedAmount = _increaseStakeInfo(_stakeTokenAddress, _amount);
 
         emit Staked(
             _msgSender(),
             _stakeTokenAddress,
             _amount,
-            userStakeInfo.stakeAmountByBlockTime[block.timestamp],
+            totalStakedAmount,
             block.timestamp
         );
     }
 
-    function _increaseStakeInfo(StakeInfo storage _userStakeInfo, uint256 _amount) private {
-        uint256 historyLength = _userStakeInfo.stakeChangedBlockTimeList.length;
+    function _increaseStakeInfo(address _stakeTokenAddress, uint256 _amount) internal returns (uint256) {
+        StakeHistory[] memory stakeHistories = userStakeHistories[_stakeTokenAddress][_msgSender()];
+        uint256 historyLength = stakeHistories.length;
+        uint256 totalStakedAmount;
 
-        _userStakeInfo.stakeChangedBlockTimeList.push(block.timestamp);
         if (historyLength == 0) {
-            _userStakeInfo.stakeAmountByBlockTime[block.timestamp] = _amount;
+            totalStakedAmount = _amount;
         }
         else {
-            uint256 stakedAmount = _getUserStakeAmount(_userStakeInfo, historyLength);
-            _userStakeInfo.stakeAmountByBlockTime[block.timestamp] = stakedAmount.add(_amount);
+            totalStakedAmount = stakeHistories[historyLength.sub(1)].totalStakeAmount.add(_amount);
         }
+        userStakeHistories[_stakeTokenAddress][_msgSender()].push(StakeHistory(block.timestamp, totalStakedAmount));
+
+        return totalStakedAmount;
     }
 
     function unStake (address _stakeTokenAddress, uint256 _amount) public isRegistered(_stakeTokenAddress) {
-        StakeInfo storage userStakeInfo = userStakeInfoByStakeToken[_stakeTokenAddress][_msgSender()];
-        uint256 historyLength = userStakeInfo.stakeChangedBlockTimeList.length;
-        require(historyLength > 0, "Stake: stake amount is 0");
-        uint256 stakedAmount = _getUserStakeAmount(userStakeInfo, historyLength);
-        require(stakedAmount >= _amount, "Stake: invalid amount. stakedAmount < amount");
+        StakeHistory[] memory stakeHistories = userStakeHistories[_stakeTokenAddress][_msgSender()];
+        require(stakeHistories.length > 0, "Stake: stake amount is 0");
+        totalStakedAmount = stakeHistories[stakeHistories.length.sub(1)].totalStakeAmount;
+        require(totalStakedAmount >= _amount, "Stake: invalid amount. stakedAmount < amount");
 
-        userStakeInfo.stakeChangedBlockTimeList.push(block.timestamp);
-        userStakeInfo.stakeAmountByBlockTime[block.timestamp] = stakedAmount.sub(_amount);
-
+        uint256 decreasedTotalStakedAmount = totalStakedAmount.sub(_amount);
+        userStakeHistories[_stakeTokenAddress][_msgSender()].push(
+            StakeHistory(block.timestamp, decreasedTotalStakedAmount)
+        );
         IERC20(_stakeTokenAddress).safeTransfer(_msgSender(), _amount);
 
         emit UnStaked(
             _msgSender(),
             _stakeTokenAddress,
             _amount,
-            userStakeInfo.stakeAmountByBlockTime[block.timestamp],
+            decreasedTotalStakedAmount,
             block.timestamp
         );
-    }
-
-    function _getUserStakeAmount(
-        StakeInfo storage _userStakeInfo,
-        uint256 _blockTimeListLength
-    ) internal view returns (uint256) {
-        uint256 lastChangedBlockTime = _userStakeInfo.stakeChangedBlockTimeList[_blockTimeListLength.sub(1)];
-        return _userStakeInfo.stakeAmountByBlockTime[lastChangedBlockTime];
     }
 }
