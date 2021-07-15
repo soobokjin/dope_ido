@@ -74,11 +74,6 @@ contract Stake is IStake, Operator, Initializable {
         bool isActive
     );
 
-    struct StakeInfo {
-        uint[] stakeChangedBlockTimeList;
-        mapping(uint256 => uint256) stakeAmountByBlockTime;
-    }
-
     struct StakeTokenInfo {
         bool isRegistered;
         bool isActive;
@@ -109,7 +104,7 @@ contract Stake is IStake, Operator, Initializable {
     function registerStakeToken(address _stakeTokenAddress) public onlyOwner {
         bool isRegistered = true;
         bool isActive = true;
-        stakeTokenInfo[_stakeTokenAddress] = StakeTokenInfo(isRegistered, isActive);
+        stakeInfo[_stakeTokenAddress] = StakeTokenInfo(isRegistered, isActive);
 
         emit StakeTokenRegistered(_stakeTokenAddress);
         emit StakeTokenActiveChanged(_stakeTokenAddress, isActive);
@@ -127,11 +122,11 @@ contract Stake is IStake, Operator, Initializable {
         emit StakeTokenActiveChanged(_stakeTokenAddress, _active);
     }
 
-    function IsStakeTokenRegistered (address _stakeTokenAddress) public view returns (bool) {
+    function isStakeTokenRegistered (address _stakeTokenAddress) public view returns (bool) {
         return stakeTokenInfo[_stakeTokenAddress].isRegistered;
     }
 
-    function IsStakeTokenActivated (address _stakeTokenAddress) public view returns (bool) {
+    function isStakeTokenActivated (address _stakeTokenAddress) public view returns (bool) {
         return stakeTokenInfo[_stakeTokenAddress].isActive;
     }
 
@@ -139,13 +134,13 @@ contract Stake is IStake, Operator, Initializable {
         address _stakeTokenAddress,
         address _user
     ) public view  isRegistered(_stakeTokenAddress) returns (uint256) {
-        StakeHistory[] memory stakeHistories = userStakeHistories[_stakeTokenAddress][_msgSender()];
+        StakeHistory[] memory stakeHistories = userStakeHistories[_stakeTokenAddress][_user];
         uint256 length = stakeHistories.length;
         if (length == 0) {
             return 0;
         }
 
-        return stakeHistories[length].totalStakeAmount;
+        return stakeHistories[length.sub(1)].totalStakeAmount;
     }
 
     function getStakeHistoryByIndex (
@@ -171,13 +166,13 @@ contract Stake is IStake, Operator, Initializable {
     ) public isRegistered(_stakeTokenAddress) isActivated(_stakeTokenAddress) {
         IERC20(_stakeTokenAddress).safeTransferFrom(_msgSender(), address(this), _amount);
 
-        uint256 totalStakedAmount = _increaseStakeInfo(_stakeTokenAddress, _amount);
+        uint256 increasedTotalStakedAmount = _increaseStakeInfo(_stakeTokenAddress, _amount);
 
         emit Staked(
             _msgSender(),
             _stakeTokenAddress,
             _amount,
-            totalStakedAmount,
+            increasedTotalStakedAmount,
             block.timestamp
         );
     }
