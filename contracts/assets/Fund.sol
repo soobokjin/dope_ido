@@ -67,7 +67,6 @@ contract Fund is IFund, Operator, Initializable {
 
     IERC20 public saleToken;
     IERC20 public exchangeToken;
-    IStake public stakeContract;
 
     // target amount to get exchange token
     uint256 public targetAmount;
@@ -86,13 +85,11 @@ contract Fund is IFund, Operator, Initializable {
         (
             address _saleTokenAddress,
             address _exchangeTokenAddress,
-            address _stakeAddress,
             address _treasuryAddress
         ) = abi.decode(args, (address, address, address, address));
 
         saleToken = IERC20(_saleTokenAddress);
         exchangeToken = IERC20(_exchangeTokenAddress);
-        stakeContract = IStake(_stakeAddress);
         treasuryAddress = _treasuryAddress;
 
         setRole(_msgSender(), _msgSender());
@@ -101,14 +98,12 @@ contract Fund is IFund, Operator, Initializable {
     function initPayload(
         address _saleTokenAddress,
         address _exchangeTokenAddress,
-        address _stakeAddress,
         address _treasuryAddress
     ) public pure override returns (bytes memory) {
         return
             abi.encode(
                 _saleTokenAddress,
                 _exchangeTokenAddress,
-                _stakeAddress,
                 _treasuryAddress
             );
     }
