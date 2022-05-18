@@ -1,27 +1,41 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+// TODO: 0.9.0
+pragma solidity >=0.8.0 <0.9.0;
 
-import {SafeMath} from '@openzeppelin/contracts/utils/math/SafeMath.sol';
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import {Context, Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
-import {Initializable} from '@openzeppelin/contracts/proxy/utils/Initializable.sol';
-import {Operator} from '../access/Operator.sol';
+import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Context, Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+
+import {Operator} from "../access/Operator.sol";
 
 import "hardhat/console.sol";
 
+// TODO: solidity coveragy
+// TODO: gas-reporter
+// TODO: prettier, prettier-plugin-solidity
 
 interface IStake {
-    function initialize (bytes memory args) external;
-    function initPayload (
-        address _stakeTokenAddress,
-        uint256 _minLockupAmount,
-        uint256 _requiredStakeAmount,
-        uint32 _requiredRetentionPeriod
-    ) external pure returns (bytes memory);
-    function isSatisfied (address user) external returns (bool);
-}
+    function initialize() external;
 
+    event Staked(
+        address indexed user,
+        address indexed stakeTokenAddress,
+        uint256 stakeAmount,
+        uint256 totalStakedAmount,
+        uint256 blockTime
+    );
+    event UnStaked(
+        address indexed user,
+        address indexed stakeTokenAddress,
+        uint256 unStakeAmount,
+        uint256 totalStakedAmount,
+        uint256 blockTime
+    );
+    event StakeTokenRegistered(address stakeTokenAddress);
+    event StakeTokenActiveChanged(address stakeTokenAddress, bool isActive);
+}
 
 contract Stake is IStake, Operator, Initializable {
     using SafeERC20 for IERC20;
@@ -29,175 +43,197 @@ contract Stake is IStake, Operator, Initializable {
     using SafeMath for uint32;
     using SafeMath for uint8;
 
-    event Staked(
-        address indexed user,
-        uint256 stakeAmount,
-        uint256 totalStakedAmount,
-        uint256 blockTime
-    );
-
-    event UnStaked(
-        address indexed user,
-        uint256 unStakeAmount,
-        uint256 totalStakedAmount,
-        uint256 blockTime
-    );
-
-    struct Period {
-        uint256 period;
-        uint256 periodFinish;
-        uint256 startTime;
+    struct StakeTokenInfo {
+        bool isRegistered;
+        bool isActive;
     }
 
-    IERC20 public stakeToken;
-    uint32 public requiredRetentionPeriod;
-    uint256 public requiredStakeAmount;
-    mapping(address => uint[]) userStakeChangedBlockTime;
-    mapping(address => mapping(uint256 => uint256)) userStakeAmountByBlockTime;
+    struct StakeHistory {
+        uint256 stakedBlockTime;
+        uint256 totalStakeAmount;
+    }
 
-    uint256 public minLockupAmount;
-    Period public stakePeriod;
+    mapping(address => StakeTokenInfo) stakeTokenInfo;
+    mapping(address => mapping(address => StakeHistory[])) userStakeHistories;
 
-    modifier onPeriod () {
+    modifier registered(address _stakeTokenAddress) {
         require(
-            stakePeriod.startTime <= block.timestamp && block.timestamp < stakePeriod.periodFinish,
-            "not stake period"
+            stakeTokenInfo[_stakeTokenAddress].isRegistered == true,
+            "Stake: stake token not registered"
         );
         _;
     }
 
-    function initialize (bytes memory args) public override initializer {
-        (
-            address _stakeTokenAddress,
-            uint256 _minLockupAmount,
-            uint256 _requiredStakeAmount,
-            uint32 _requiredRetentionPeriod
-        ) = abi.decode(args, (address, uint256, uint256, uint32));
+    modifier activated(address _stakeTokenAddress) {
+        require(
+            stakeTokenInfo[_stakeTokenAddress].isActive == true,
+            "Stake: stake token not activated"
+        );
+        _;
+    }
 
-        stakeToken = IERC20(_stakeTokenAddress);
-        minLockupAmount = _minLockupAmount;
-        requiredStakeAmount = _requiredStakeAmount;
-        // Timestamp
-        requiredRetentionPeriod = _requiredRetentionPeriod;
-
+    function initialize() public override initializer {
         setRole(_msgSender(), _msgSender());
     }
 
-    function initPayload (
-        address _stakeTokenAddress,
-        uint256 _minLockupAmount,
-        uint256 _requiredStakeAmount,
-        uint32 _requiredRetentionPeriod
-    ) public pure override returns (bytes memory) {
-        return abi.encode(
-            _stakeTokenAddress,
-            _minLockupAmount,
-            _requiredStakeAmount,
-            _requiredRetentionPeriod
+    function registerStakeToken(address _stakeTokenAddress) public onlyOwner {
+        require(
+            stakeTokenInfo[_stakeTokenAddress].isRegistered == false,
+            "Stake: already registered"
         );
+        bool isRegistered = true;
+        bool isActive = true;
+        stakeTokenInfo[_stakeTokenAddress] = StakeTokenInfo(
+            isRegistered,
+            isActive
+        );
+
+        emit StakeTokenRegistered(_stakeTokenAddress);
+        emit StakeTokenActiveChanged(_stakeTokenAddress, isActive);
     }
 
-    function setPeriod (uint256 _startTime, uint256 _period)
+    function changeStakeTokenActivation(
+        address _stakeTokenAddress,
+        bool _active
+    ) public registered(_stakeTokenAddress) onlyOwner {
+        StakeTokenInfo memory tokenInfo = stakeTokenInfo[_stakeTokenAddress];
+        tokenInfo.isActive = _active;
+
+        stakeTokenInfo[_stakeTokenAddress] = tokenInfo;
+
+        emit StakeTokenActiveChanged(_stakeTokenAddress, _active);
+    }
+
+    function isStakeTokenRegistered(address _stakeTokenAddress)
         public
-        onlyOwner
+        view
+        returns (bool)
     {
-        stakePeriod.period = _period;
-        stakePeriod.startTime = _startTime;
-        stakePeriod.periodFinish = _startTime.add(_period);
+        return stakeTokenInfo[_stakeTokenAddress].isRegistered;
     }
 
-    function setRequiredStakeAmount (uint256 amount) public onlyOwner {
-        requiredStakeAmount = amount;
+    function isStakeTokenActivated(address _stakeTokenAddress)
+        public
+        view
+        returns (bool)
+    {
+        return stakeTokenInfo[_stakeTokenAddress].isActive;
     }
 
-    function setRequiredRetentionPeriod (uint32 period) public onlyOwner {
-        requiredRetentionPeriod = period;
-    }
-
-    function getCurrentStakeAmount (address user) public view returns (uint256) {
-        uint256 length = userStakeChangedBlockTime[user].length;
+    function getCurrentStakeAmount(address _stakeTokenAddress, address _user)
+        public
+        view
+        registered(_stakeTokenAddress)
+        returns (uint256)
+    {
+        StakeHistory[] memory stakeHistories = userStakeHistories[
+            _stakeTokenAddress
+        ][_user];
+        uint256 length = stakeHistories.length;
         if (length == 0) {
             return 0;
         }
-        uint256 lastBlockTime = userStakeChangedBlockTime[user][length - 1];
-        return userStakeAmountByBlockTime[user][lastBlockTime];
+
+        return stakeHistories[length.sub(1)].totalStakeAmount;
     }
 
-    function stake (uint256 amount) public onPeriod {
-        require(stakeToken.allowance(_msgSender(), address(this)) >= amount, "insufficient allowance");
-        require(amount >= minLockupAmount, "insufficient amount");
-        address sender = _msgSender();
-        stakeToken.safeTransferFrom(sender, address(this), amount);
-        _updateStakeInfo(sender, amount);
+    function getStakeHistoryByIndex(
+        address _stakeTokenAddress,
+        address _user,
+        uint256 _index
+    ) public view registered(_stakeTokenAddress) returns (uint256, uint256) {
+        StakeHistory memory history = userStakeHistories[_stakeTokenAddress][
+            _user
+        ][_index];
+
+        return (history.totalStakeAmount, history.stakedBlockTime);
+    }
+
+    function getStakeHistoryLength(address _stakeTokenAddress, address _user)
+        public
+        view
+        registered(_stakeTokenAddress)
+        returns (uint256)
+    {
+        return userStakeHistories[_stakeTokenAddress][_user].length;
+    }
+
+    function stake(address _stakeTokenAddress, uint256 _amount)
+        public
+        registered(_stakeTokenAddress)
+        activated(_stakeTokenAddress)
+    {
+        IERC20(_stakeTokenAddress).safeTransferFrom(
+            _msgSender(),
+            address(this),
+            _amount
+        );
+
+        uint256 increasedTotalStakedAmount = _increaseStakeInfo(
+            _stakeTokenAddress,
+            _amount
+        );
 
         emit Staked(
-            _msgSender(), amount, userStakeAmountByBlockTime[sender][block.timestamp], block.timestamp
+            _msgSender(),
+            _stakeTokenAddress,
+            _amount,
+            increasedTotalStakedAmount,
+            block.timestamp
         );
     }
 
-    function _updateStakeInfo (address sender, uint256 amount) private {
-        uint256 historyLength = userStakeChangedBlockTime[sender].length;
+    function _increaseStakeInfo(address _stakeTokenAddress, uint256 _amount)
+        internal
+        returns (uint256)
+    {
+        StakeHistory[] memory stakeHistories = userStakeHistories[
+            _stakeTokenAddress
+        ][_msgSender()];
+        uint256 historyLength = stakeHistories.length;
+        uint256 totalStakedAmount;
 
         if (historyLength == 0) {
-            userStakeChangedBlockTime[sender].push(block.timestamp);
-            userStakeAmountByBlockTime[sender][block.timestamp] = amount;
+            totalStakedAmount = _amount;
+        } else {
+            totalStakedAmount = stakeHistories[historyLength.sub(1)]
+            .totalStakeAmount
+            .add(_amount);
         }
-        else {
-            uint256 lastChangedBlockTime = userStakeChangedBlockTime[sender][historyLength.sub(1)];
-            uint256 lastStakedAmount = userStakeAmountByBlockTime[sender][lastChangedBlockTime];
-            userStakeChangedBlockTime[sender].push(block.timestamp);
-            userStakeAmountByBlockTime[sender][block.timestamp] = lastStakedAmount.add(amount);
-        }
+        userStakeHistories[_stakeTokenAddress][_msgSender()].push(
+            StakeHistory(block.timestamp, totalStakedAmount)
+        );
+
+        return totalStakedAmount;
     }
 
-    function unStake (uint256 amount) public {
-        // Todo: call unStake when succeed to fund
-        require(userStakeChangedBlockTime[_msgSender()].length > 0, "stake amount is 0");
-        address sender = _msgSender();
-        uint256 blockTime = block.timestamp;
-        uint256 historyLength = userStakeChangedBlockTime[sender].length;
-        uint256 lastChangedBlockTime = userStakeChangedBlockTime[sender][historyLength.sub(1)];
-        uint256 stakedAmount = userStakeAmountByBlockTime[sender][lastChangedBlockTime];
-        require(stakedAmount >= amount, "invalid amount. stakedAmount < amount");
+    function unStake(address _stakeTokenAddress, uint256 _amount)
+        public
+        registered(_stakeTokenAddress)
+    {
+        StakeHistory[] memory stakeHistories = userStakeHistories[
+            _stakeTokenAddress
+        ][_msgSender()];
+        require(stakeHistories.length > 0, "Stake: stake amount is 0");
+        uint256 totalStakedAmount = stakeHistories[stakeHistories.length.sub(1)]
+        .totalStakeAmount;
+        require(
+            totalStakedAmount >= _amount,
+            "Stake: invalid amount. stakedAmount < amount"
+        );
 
-        userStakeAmountByBlockTime[sender][blockTime] = stakedAmount.sub(amount);
-        userStakeChangedBlockTime[sender].push(blockTime);
-        stakeToken.safeTransfer(sender, amount);
+        uint256 decreasedTotalStakedAmount = totalStakedAmount.sub(_amount);
+        userStakeHistories[_stakeTokenAddress][_msgSender()].push(
+            StakeHistory(block.timestamp, decreasedTotalStakedAmount)
+        );
+        IERC20(_stakeTokenAddress).safeTransfer(_msgSender(), _amount);
 
         emit UnStaked(
-            sender, amount, userStakeAmountByBlockTime[sender][blockTime], blockTime
+            _msgSender(),
+            _stakeTokenAddress,
+            _amount,
+            decreasedTotalStakedAmount,
+            block.timestamp
         );
-    }
-
-    function isSatisfied (address user) external view override returns (bool) {
-        if (userStakeChangedBlockTime[user].length == 0) {
-            return false;
-        }
-        uint256 satisfiedPeriod;
-        uint256 stakeAmount;
-        uint256 changedBlockTime;
-        uint256 changedStakeAmount;
-        uint256 prevBlockTime = stakePeriod.startTime;
-        uint256 endBlockTime = (
-        stakePeriod.periodFinish > block.timestamp
-        ) ? block.timestamp : stakePeriod.periodFinish;
-
-        for (uint8 i ; i < userStakeChangedBlockTime[user].length ; i++) {
-            changedBlockTime = userStakeChangedBlockTime[user][i];
-            changedStakeAmount = userStakeAmountByBlockTime[user][changedBlockTime];
-            satisfiedPeriod = _calcSatisfiedPeriod(stakeAmount, satisfiedPeriod, changedBlockTime.sub(prevBlockTime));
-            stakeAmount = changedStakeAmount;
-            prevBlockTime = changedBlockTime;
-        }
-        satisfiedPeriod = _calcSatisfiedPeriod(
-            stakeAmount, satisfiedPeriod, endBlockTime.sub(changedBlockTime)
-        );
-        return (satisfiedPeriod >= requiredRetentionPeriod) ? true: false;
-    }
-
-    function _calcSatisfiedPeriod(
-        uint256 stakeAmount, uint256 satisfiedPeriod, uint256 retentionPeriod
-    ) private view returns (uint256) {
-        return stakeAmount >= requiredStakeAmount ? satisfiedPeriod.add(retentionPeriod): 0;
     }
 }

@@ -96,4 +96,27 @@ describe("Fund", () => {
         expect(await saleTokenContract.balanceOf(investor.address)).to.eq(investAmount);
         expect(await exchangeTokenContract.balanceOf(treasury.address)).to.eq(investAmount);
     });
+
+    it("validate merkle proof", async () => {
+        /*
+            leafs:
+                0xC7905463C85C6398B4C146D5AcB02623Cda60E24
+                0xeaE7E225C6A0733f96C3b0691d61a3B62B8cB850
+                0x96d80c5189294e6e12Becb69f16591cd5cfc057C
+                0x96d80c5189294e6e12Becb69f16591cd5cfc057C
+         */
+        let address1: string = '0xC7905463C85C6398B4C146D5AcB02623Cda60E24';
+        let merkleProof = [
+            '0x4c5031fa63aa4cd4aab2ce752b8f2450267997e0bd647933b036a04ebff94010',
+            '0x19fa3742510ad34c636f1b090f0125197213fa56d9d6b411ef582a6462f40efa'
+        ];
+        let root: string = '0xb9bf33515673eecd7e594c529c12dae575bd20acec93c21cdd624be099cc7c42';
+        await stakeContract.connect(stakeOwner).registerSaleTokenWhiteList(
+            stakeTokenContract.address, root
+        )
+
+        expect(
+            await stakeContract.isWhiteListed(address1, stakeTokenContract.address, merkleProof, 0)
+        ).to.be.eq(true);
+    });
 });
